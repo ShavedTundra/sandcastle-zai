@@ -336,7 +336,7 @@ describe("withSandboxLifecycle (worktree mode — skipSync: true)", () => {
     );
   });
 
-  it("commits in worktree are immediately visible on host (no sync-out needed)", async () => {
+  it("commits in worktree are cherry-picked onto host's current branch", async () => {
     const { hostDir, worktreeDir, layer } = await setupWorktree();
 
     await Effect.runPromise(
@@ -362,18 +362,14 @@ describe("withSandboxLifecycle (worktree mode — skipSync: true)", () => {
       ).pipe(Effect.provide(Layer.merge(layer, testDisplayLayer))),
     );
 
-    // Commit is visible on host under the worktree branch — no sync-out was needed
-    const { stdout: log } = await execAsync(
-      'git log --oneline "sandcastle/test"',
-      { cwd: hostDir },
-    );
+    // Commit is cherry-picked onto host's current branch (main)
+    const { stdout: log } = await execAsync("git log --oneline main", {
+      cwd: hostDir,
+    });
     expect(log).toContain("worktree commit");
 
-    // File is directly readable from the worktree (same filesystem)
-    const content = await readFile(
-      join(worktreeDir, "worktree-file.txt"),
-      "utf-8",
-    );
+    // File is readable from the host's main branch
+    const content = await readFile(join(hostDir, "worktree-file.txt"), "utf-8");
     expect(content.trim()).toBe("worktree-content");
   });
 
@@ -428,7 +424,8 @@ describe("withSandboxLifecycle (worktree mode — skipSync: true)", () => {
     );
 
     expect(result.commits).toHaveLength(1);
-    expect(result.branch).toBe("sandcastle/test");
+    // Commits are cherry-picked onto host's current branch (main)
+    expect(result.branch).toBe("main");
   });
 
   it("returns empty commits when no work is done in worktree mode", async () => {
@@ -447,5 +444,147 @@ describe("withSandboxLifecycle (worktree mode — skipSync: true)", () => {
 
     expect(result.commits).toHaveLength(0);
     expect(result.result).toBe("no-op");
+  });
+
+  it("temp branch is deleted after cherry-pick", async () => {
+    const { hostDir, worktreeDir, layer } = await setupWorktree();
+
+    await Effect.runPromise(
+      withSandboxLifecycle(
+        {
+          hostRepoDir: hostDir,
+          sandboxRepoDir: worktreeDir,
+          skipSync: true,
+        },
+        (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.sandbox.exec('git config user.email "test@test.com"', {
+              cwd: ctx.sandboxRepoDir,
+            });
+            yield* ctx.sandbox.exec('git config user.name "Test"', {
+              cwd: ctx.sandboxRepoDir,
+            });
+            yield* ctx.sandbox.exec(
+              'sh -c "echo content > new-file.txt && git add new-file.txt && git commit -m \\"temp commit\\""',
+              { cwd: ctx.sandboxRepoDir },
+            );
+          }),
+      ).pipe(Effect.provide(Layer.merge(layer, testDisplayLayer))),
+    );
+
+    // The temp branch should no longer exist
+    const { stdout } = await execAsync('git branch --list "sandcastle/test"', {
+      cwd: hostDir,
+    });
+    expect(stdout.trim()).toBe("");
+  });
+
+  it("temp branch is deleted even when no commits were made", async () => {
+    const { hostDir, worktreeDir, layer } = await setupWorktree();
+
+    await Effect.runPromise(
+      withSandboxLifecycle(
+        {
+          hostRepoDir: hostDir,
+          sandboxRepoDir: worktreeDir,
+          skipSync: true,
+        },
+        () => Effect.succeed("no-op"),
+      ).pipe(Effect.provide(Layer.merge(layer, testDisplayLayer))),
+    );
+
+    // Temp branch deleted even with no commits
+    const { stdout } = await execAsync('git branch --list "sandcastle/test"', {
+      cwd: hostDir,
+    });
+    expect(stdout.trim()).toBe("");
+  });
+
+  it("preserves temp branch and throws on cherry-pick failure", async () => {
+    const { hostDir, worktreeDir, layer } = await setupWorktree();
+
+    await expect(
+      Effect.runPromise(
+        withSandboxLifecycle(
+          {
+            hostRepoDir: hostDir,
+            sandboxRepoDir: worktreeDir,
+            skipSync: true,
+          },
+          (ctx) =>
+            Effect.gen(function* () {
+              // Commit a change to file.txt in the worktree
+              yield* ctx.sandbox.exec('git config user.email "test@test.com"', {
+                cwd: ctx.sandboxRepoDir,
+              });
+              yield* ctx.sandbox.exec('git config user.name "Test"', {
+                cwd: ctx.sandboxRepoDir,
+              });
+              yield* ctx.sandbox.exec(
+                'sh -c "echo worktree-version > file.txt && git add file.txt && git commit -m \\"worktree change\\""',
+                { cwd: ctx.sandboxRepoDir },
+              );
+              // Also commit a conflicting change to file.txt on main directly
+              yield* Effect.promise(async () => {
+                await execAsync(
+                  'sh -c "echo main-version > file.txt && git add file.txt && git commit -m \\"main conflict\\""',
+                  { cwd: hostDir },
+                );
+              });
+            }),
+        ).pipe(Effect.provide(Layer.merge(layer, testDisplayLayer))),
+      ),
+    ).rejects.toThrow(/cherry-pick/i);
+
+    // Temp branch should still exist for recovery
+    const { stdout } = await execAsync('git branch --list "sandcastle/test"', {
+      cwd: hostDir,
+    });
+    expect(stdout.trim()).toBeTruthy();
+  });
+
+  it("no cherry-pick when explicit branch is given", async () => {
+    const { hostDir, worktreeDir, layer } = await setupWorktree();
+
+    const result = await Effect.runPromise(
+      withSandboxLifecycle(
+        {
+          hostRepoDir: hostDir,
+          sandboxRepoDir: worktreeDir,
+          // explicit branch — commits stay on that branch, no cherry-pick
+          branch: "sandcastle/test",
+          skipSync: true,
+        },
+        (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.sandbox.exec('git config user.email "test@test.com"', {
+              cwd: ctx.sandboxRepoDir,
+            });
+            yield* ctx.sandbox.exec('git config user.name "Test"', {
+              cwd: ctx.sandboxRepoDir,
+            });
+            yield* ctx.sandbox.exec(
+              'sh -c "echo explicit > explicit-file.txt && git add explicit-file.txt && git commit -m \\"explicit branch commit\\""',
+              { cwd: ctx.sandboxRepoDir },
+            );
+          }),
+      ).pipe(Effect.provide(Layer.merge(layer, testDisplayLayer))),
+    );
+
+    // Branch stays as the explicit branch
+    expect(result.branch).toBe("sandcastle/test");
+    expect(result.commits).toHaveLength(1);
+
+    // Commit is on sandcastle/test, NOT cherry-picked to main
+    const { stdout: mainLog } = await execAsync("git log --oneline main", {
+      cwd: hostDir,
+    });
+    expect(mainLog).not.toContain("explicit branch commit");
+
+    const { stdout: branchLog } = await execAsync(
+      'git log --oneline "sandcastle/test"',
+      { cwd: hostDir },
+    );
+    expect(branchLog).toContain("explicit branch commit");
   });
 });
