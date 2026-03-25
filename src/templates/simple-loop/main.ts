@@ -5,6 +5,9 @@ import { run } from "sandcastle";
 // Or add to package.json scripts: "sandcastle": "npx tsx .sandcastle/main.ts"
 
 await run({
+  // A name for this run, shown as a prefix in log output.
+  name: "worker",
+
   // Path to the prompt file. Shell expressions inside are evaluated inside the
   // sandbox at the start of each iteration, so the agent always sees fresh data.
   promptFile: "./.sandcastle/prompt.md",
