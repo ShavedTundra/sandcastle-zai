@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { DockerSandbox } from "./DockerSandbox.js";
-import { startContainer, removeContainer } from "./DockerLifecycle.js";
+import {
+  startContainer,
+  removeContainer,
+  chownInContainer,
+} from "./DockerLifecycle.js";
 import type { DockerError } from "./errors.js";
 import { Sandbox } from "./Sandbox.js";
 import * as WorktreeManager from "./WorktreeManager.js";
@@ -125,10 +129,21 @@ export const WorktreeDockerSandboxFactory = {
                     process.exit(1);
                   };
 
+                  const hostUid = process.getuid?.() ?? 1000;
+                  const hostGid = process.getgid?.() ?? 1000;
+
                   return startContainer(containerName, imageName, env, {
                     volumeMounts,
                     workdir: SANDBOX_WORKSPACE_DIR,
+                    user: `${hostUid}:${hostGid}`,
                   }).pipe(
+                    Effect.andThen(
+                      chownInContainer(
+                        containerName,
+                        `${hostUid}:${hostGid}`,
+                        "/home/agent",
+                      ),
+                    ),
                     Effect.tap(() =>
                       Effect.sync(() => {
                         process.on("exit", cleanup);

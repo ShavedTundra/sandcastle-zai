@@ -183,6 +183,27 @@ describe("WorktreeManager.create", () => {
     await remove(wtB.path);
   });
 
+  it("creates a new branch from HEAD when specified branch does not exist", async () => {
+    const repoDir = await setupRepo();
+    const { path, branch } = await create(repoDir, {
+      branch: "sandcastle/issue-42-new-feature",
+    });
+
+    expect(branch).toBe("sandcastle/issue-42-new-feature");
+    expect(await getBranch(path)).toBe("sandcastle/issue-42-new-feature");
+
+    // The worktree should have the same HEAD as the main repo
+    const { stdout: mainHead } = await execAsync("git rev-parse HEAD", {
+      cwd: repoDir,
+    });
+    const { stdout: worktreeHead } = await execAsync("git rev-parse HEAD", {
+      cwd: path,
+    });
+    expect(worktreeHead.trim()).toBe(mainHead.trim());
+
+    await remove(path);
+  });
+
   it("detects collision when branch is checked out in the main working tree", async () => {
     const repoDir = await setupRepo();
     // "main" is the currently checked-out branch in the main working tree

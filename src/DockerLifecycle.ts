@@ -55,6 +55,8 @@ export const buildImage = (
 export interface StartContainerOptions {
   readonly volumeMounts?: readonly string[];
   readonly workdir?: string;
+  /** Run the container as this uid:gid instead of the Dockerfile's USER. */
+  readonly user?: string;
 }
 
 /**
@@ -96,6 +98,7 @@ export const startContainer = (
     ]);
 
     const workdirFlags = options?.workdir ? ["-w", options.workdir] : [];
+    const userFlags = options?.user ? ["--user", options.user] : [];
 
     yield* dockerExec([
       "run",
@@ -105,9 +108,33 @@ export const startContainer = (
       ...envFlags,
       ...volumeFlags,
       ...workdirFlags,
+      ...userFlags,
       imageName,
     ]);
   });
+
+/**
+ * Fix ownership of a directory inside the container.
+ * Runs as root so the target owner can write to the path.
+ * @param owner - chown-compatible owner spec, e.g. "1000:1000" or "agent"
+ */
+export const chownInContainer = (
+  containerName: string,
+  owner: string,
+  path: string,
+): Effect.Effect<void, DockerError> =>
+  Effect.asVoid(
+    dockerExec([
+      "exec",
+      "-u",
+      "root",
+      containerName,
+      "chown",
+      "-R",
+      owner,
+      path,
+    ]),
+  );
 
 /**
  * Stop and remove a container without removing the image.

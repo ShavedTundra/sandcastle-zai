@@ -104,7 +104,19 @@ export const create = async (
           `Use a different branch name, or wait for the other run to finish.`,
       );
     }
-    await execGit(["worktree", "add", worktreePath, branch], repoDir);
+    try {
+      await execGit(["worktree", "add", worktreePath, branch], repoDir);
+    } catch (e: unknown) {
+      const msg = String((e as Error).message ?? e);
+      if (msg.includes("invalid reference")) {
+        await execGit(
+          ["worktree", "add", "-b", branch, worktreePath, "HEAD"],
+          repoDir,
+        );
+      } else {
+        throw e;
+      }
+    }
   } else {
     try {
       await execGit(
