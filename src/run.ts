@@ -1,10 +1,8 @@
-import { NodeContext } from "@effect/platform-node";
+import { NodeContext, NodeFileSystem } from "@effect/platform-node";
 import path, { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { NodeFileSystem } from "@effect/platform-node";
 import { getAgentProvider } from "./AgentProvider.js";
 import { readConfig } from "./Config.js";
-import { NodeFileSystem } from "@effect/platform-node";
 import { ClackDisplay, Display, FileDisplay } from "./Display.js";
 import { orchestrate } from "./Orchestrator.js";
 import { resolvePrompt } from "./PromptResolver.js";
