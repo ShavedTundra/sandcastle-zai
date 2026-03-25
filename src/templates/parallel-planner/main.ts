@@ -56,6 +56,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   const plan = await sandcastle.run({
     hooks,
     copyToSandbox,
+    name: "planner",
     // One iteration is enough: the planner just needs to read and reason,
     // not write code.
     maxIterations: 1,
@@ -104,6 +105,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       sandcastle.run({
         hooks,
         copyToSandbox,
+        name: "implementer",
         // Give each agent plenty of room to implement and iterate on tests.
         maxIterations: 100,
         // Sonnet for execution: fast and capable enough for typical issue work.
@@ -177,6 +179,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   await sandcastle.run({
     hooks,
     copyToSandbox,
+    name: "merger",
     maxIterations: 10,
     // Sonnet is sufficient for merge conflict resolution.
     model: "claude-sonnet-4-6",

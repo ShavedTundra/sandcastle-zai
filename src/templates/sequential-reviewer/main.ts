@@ -57,6 +57,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   const implement = await sandcastle.run({
     hooks,
     copyToSandbox,
+    name: "implementer",
     maxIterations: 100,
     model: "claude-sonnet-4-6",
     promptFile: "./.sandcastle/implement-prompt.md",
@@ -83,6 +84,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   await sandcastle.run({
     hooks,
     copyToSandbox,
+    name: "reviewer",
     maxIterations: 10,
     model: "claude-sonnet-4-6",
     promptFile: "./.sandcastle/review-prompt.md",
