@@ -20,12 +20,6 @@ export interface TokenUsage {
 
 export const DEFAULT_MODEL = "claude-opus-4-6";
 
-export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-  "claude-opus-4-6": 200_000,
-  "claude-sonnet-4-6": 200_000,
-  "claude-haiku-4-5-20251001": 200_000,
-};
-
 const extractUsage = (obj: Record<string, unknown>): TokenUsage | null => {
   const usage = obj.usage as Record<string, unknown> | undefined;
   if (
@@ -118,28 +112,10 @@ const shellEscape = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'";
 
 const formatNumber = (n: number): string => n.toLocaleString("en-US");
 
-const formatUsageRows = (
-  usage: TokenUsage,
-  model: string,
-): Record<string, string> => {
-  const rows: Record<string, string> = {
-    Tokens: `${formatNumber(usage.input_tokens)} in / ${formatNumber(usage.output_tokens)} out`,
-  };
-
-  const contextWindow = MODEL_CONTEXT_WINDOWS[model];
-  if (contextWindow) {
-    const contextTokens =
-      usage.input_tokens +
-      usage.cache_read_input_tokens +
-      usage.cache_creation_input_tokens;
-    rows.Context = `${((contextTokens / contextWindow) * 100).toFixed(1)}%`;
-  }
-
-  rows.Cost = `$${usage.total_cost_usd.toFixed(2)}`;
-  rows.Turns = `${usage.num_turns}`;
-
-  return rows;
-};
+const formatUsageRows = (usage: TokenUsage): Record<string, string> => ({
+  Tokens: `${formatNumber(usage.input_tokens)} in / ${formatNumber(usage.output_tokens)} out`,
+  Turns: `${usage.num_turns}`,
+});
 
 const DEFAULT_COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
 
@@ -210,10 +186,7 @@ export const orchestrate = (
 
               // Log usage summary
               if (usage) {
-                yield* display.summary(
-                  "Token Usage",
-                  formatUsageRows(usage, resolvedModel),
-                );
+                yield* display.summary("Token Usage", formatUsageRows(usage));
               }
 
               // Check completion signal

@@ -1384,7 +1384,8 @@ describe("Orchestrator Display integration", () => {
       rows: Record<string, string>;
     };
     expect(usageSummary.rows).toHaveProperty("Tokens");
-    expect(usageSummary.rows).toHaveProperty("Cost");
+    expect(usageSummary.rows).not.toHaveProperty("Cost");
+    expect(usageSummary.rows).not.toHaveProperty("Context");
 
     // Completion status
     expect(
