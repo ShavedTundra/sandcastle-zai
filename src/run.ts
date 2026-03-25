@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { Effect, Layer } from "effect";
 import { getAgentProvider } from "./AgentProvider.js";
 import { readConfig } from "./Config.js";
@@ -13,6 +14,12 @@ import {
   type PromptArgs,
   substitutePromptArgs,
 } from "./PromptArgumentSubstitution.js";
+
+const execAsync = promisify(exec);
+
+/** Replace characters that are invalid or problematic in file paths with dashes. */
+export const sanitizeBranchForFilename = (branch: string): string =>
+  branch.replace(/[/\\:*?"<>|]/g, "-");
 
 export type LoggingOption =
   | { readonly type: "file"; readonly path: string }
@@ -96,10 +103,28 @@ export const run = async (options: RunOptions): Promise<RunResult> => {
   const env = await resolveEnv(hostRepoDir);
   provider.envCheck(env);
 
+  // Resolve log file name from branch (explicit or current git branch)
+  let logBranchName = branch;
+  if (!logBranchName) {
+    try {
+      const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD", {
+        cwd: hostRepoDir,
+      });
+      logBranchName = stdout.trim();
+    } catch {
+      logBranchName = "sandcastle";
+    }
+  }
+
   // Resolve logging option
   const resolvedLogging: LoggingOption = options.logging ?? {
     type: "file",
-    path: join(hostRepoDir, ".sandcastle", "logs", `${randomUUID()}.log`),
+    path: join(
+      hostRepoDir,
+      ".sandcastle",
+      "logs",
+      `${sanitizeBranchForFilename(logBranchName)}.log`,
+    ),
   };
   const displayLayer =
     resolvedLogging.type === "file"
