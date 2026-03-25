@@ -46,7 +46,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       sandcastle.run({
         hooks,
         maxIterations: 100,
-        model: "claude-opus-4-6",
+        model: "claude-sonnet-4-6",
         promptFile: "./.sandcastle/implement-prompt.md",
         promptArgs: {
           ISSUE_NUMBER: String(issue.number),
@@ -78,7 +78,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   await sandcastle.run({
     hooks,
     maxIterations: 10,
-    model: "claude-opus-4-6",
+    model: "claude-sonnet-4-6",
     promptFile: "./.sandcastle/merge-prompt.md",
     promptArgs: {
       BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),

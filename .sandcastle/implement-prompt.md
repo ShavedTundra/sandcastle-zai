@@ -29,6 +29,10 @@ If applicable, use RGR to complete the task.
 3. REPEAT until done
 4. REFACTOR the code
 
+# FEEDBACK LOOPS
+
+Before committing, run `npm run typecheck` and `npm run test` to ensure the tests pass.
+
 # COMMIT
 
 Make a git commit. The commit message must:
