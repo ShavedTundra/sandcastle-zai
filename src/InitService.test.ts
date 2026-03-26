@@ -126,7 +126,7 @@ describe("InitService scaffold", () => {
     expect(prompt).toContain("<promise>COMPLETE</promise>");
   });
 
-  it("blank template produces skeleton prompt and no main.ts", async () => {
+  it("blank template produces skeleton prompt and main.ts", async () => {
     const dir = await makeDir();
     await runScaffold(dir, fakeProvider, "blank");
 
@@ -136,7 +136,23 @@ describe("InitService scaffold", () => {
     expect(prompt).toContain("<promise>COMPLETE</promise>");
 
     const { access } = await import("node:fs/promises");
-    await expect(access(join(configDir, "main.ts"))).rejects.toThrow();
+    await expect(access(join(configDir, "main.ts"))).resolves.toBeUndefined();
+  });
+
+  it("blank template main.ts imports from @ai-hero/sandcastle", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir, fakeProvider, "blank");
+
+    const mainTs = await readFile(join(dir, ".sandcastle", "main.ts"), "utf-8");
+    expect(mainTs).toContain('"@ai-hero/sandcastle"');
+  });
+
+  it("blank template main.ts calls run()", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir, fakeProvider, "blank");
+
+    const mainTs = await readFile(join(dir, ".sandcastle", "main.ts"), "utf-8");
+    expect(mainTs).toContain("run(");
   });
 
   it("blank template produces identical output to default (no template arg)", async () => {
@@ -310,12 +326,13 @@ describe("InitService scaffold", () => {
   });
 
   describe("getNextStepsLines", () => {
-    it("blank template returns steps mentioning .env and npx sandcastle run", () => {
+    it("blank template returns steps mentioning .env, main.ts, and JS API (not npx sandcastle run)", () => {
       const lines = getNextStepsLines("blank");
       expect(lines.length).toBeGreaterThanOrEqual(2);
       const joined = lines.join("\n");
       expect(joined).toContain(".sandcastle/.env");
-      expect(joined).toContain("npx sandcastle run");
+      expect(joined).toContain("main.ts");
+      expect(joined).not.toContain("npx sandcastle run");
     });
 
     it("non-blank template returns steps mentioning .env, package.json scripts, and npm run sandcastle", () => {

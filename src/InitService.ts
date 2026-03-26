@@ -44,7 +44,9 @@ export function getNextStepsLines(template: string): string[] {
       "Next steps:",
       "1. Fill in .sandcastle/.env with your agent credentials",
       "2. Read and customize .sandcastle/prompt.md to describe what you want the agent to do",
-      "3. Run `npx sandcastle run` to start the agent",
+      `3. Customize .sandcastle/main.ts — it uses the JS API (\`run()\`) to control how the agent runs`,
+      `4. Add "sandcastle": "npx tsx .sandcastle/main.ts" to your package.json scripts`,
+      "5. Run `npm run sandcastle` to start the agent",
     ];
   } else {
     return [
