@@ -197,7 +197,7 @@ export interface OrchestrateOptions {
   readonly prompt: string;
   readonly branch?: string;
   readonly model?: string;
-  readonly completionSignal?: string;
+  readonly completionSignal?: string | string[];
   /** Timeout in seconds. If the run exceeds this, it fails with TimeoutError. Default: 1200 (20 minutes) */
   readonly timeoutSeconds?: number;
   /** Optional name for the run, prepended to status messages as [name] */
@@ -206,7 +206,8 @@ export interface OrchestrateOptions {
 
 export interface OrchestrateResult {
   readonly iterationsRun: number;
-  readonly wasCompletionSignalDetected: boolean;
+  /** The matched completion signal string, or undefined if none fired. */
+  readonly completionSignal?: string;
   readonly stdout: string;
   readonly commits: { sha: string }[];
   readonly branch: string;
@@ -222,8 +223,12 @@ export const orchestrate = (
     const { hostRepoDir, sandboxRepoDir, iterations, hooks, prompt, branch } =
       options;
     const resolvedModel = options.model ?? DEFAULT_MODEL;
-    const completionSignal =
-      options.completionSignal ?? DEFAULT_COMPLETION_SIGNAL;
+    const completionSignals: string[] =
+      options.completionSignal === undefined
+        ? [DEFAULT_COMPLETION_SIGNAL]
+        : Array.isArray(options.completionSignal)
+          ? options.completionSignal
+          : [options.completionSignal];
 
     const label = (msg: string): string =>
       options.name ? `[${options.name}] ${msg}` : msg;
@@ -280,14 +285,11 @@ export const orchestrate = (
                 }
 
                 // Check completion signal
-                if (agentOutput.includes(completionSignal)) {
-                  return {
-                    wasCompletionSignalDetected: true,
-                    stdout: agentOutput,
-                  } as const;
-                }
+                const matchedSignal = completionSignals.find((sig) =>
+                  agentOutput.includes(sig),
+                );
                 return {
-                  wasCompletionSignalDetected: false,
+                  completionSignal: matchedSignal,
                   stdout: agentOutput,
                 } as const;
               }),
@@ -298,14 +300,14 @@ export const orchestrate = (
       allStdout += lifecycleResult.result.stdout;
       resolvedBranch = lifecycleResult.branch;
 
-      if (lifecycleResult.result.wasCompletionSignalDetected) {
+      if (lifecycleResult.result.completionSignal !== undefined) {
         yield* display.status(
           label(`Agent signaled completion after ${i} iteration(s).`),
           "success",
         );
         return {
           iterationsRun: i,
-          wasCompletionSignalDetected: true,
+          completionSignal: lifecycleResult.result.completionSignal,
           stdout: allStdout,
           commits: allCommits,
           branch: resolvedBranch,
@@ -319,7 +321,7 @@ export const orchestrate = (
     );
     return {
       iterationsRun: iterations,
-      wasCompletionSignalDetected: false,
+      completionSignal: undefined,
       stdout: allStdout,
       commits: allCommits,
       branch: resolvedBranch,

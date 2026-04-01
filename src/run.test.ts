@@ -89,7 +89,7 @@ describe("printFileDisplayStartup", () => {
 
 describe("buildCompletionMessage", () => {
   it("returns success message when completion signal was detected", () => {
-    const result = buildCompletionMessage(true, 3);
+    const result = buildCompletionMessage("<promise>COMPLETE</promise>", 3);
     expect(result.message).toBe(
       "Run complete: agent finished after 3 iteration(s).",
     );
@@ -97,7 +97,7 @@ describe("buildCompletionMessage", () => {
   });
 
   it("returns warn message when max iterations reached without signal", () => {
-    const result = buildCompletionMessage(false, 5);
+    const result = buildCompletionMessage(undefined, 5);
     expect(result.message).toBe(
       "Run complete: reached 5 iteration(s) without completion signal.",
     );
@@ -105,7 +105,7 @@ describe("buildCompletionMessage", () => {
   });
 
   it("reflects the correct iteration count for 1 iteration", () => {
-    const result = buildCompletionMessage(true, 1);
+    const result = buildCompletionMessage("<promise>COMPLETE</promise>", 1);
     expect(result.message).toContain("1 iteration(s)");
   });
 });
@@ -114,7 +114,7 @@ describe("RunResult", () => {
   it("includes logFilePath when logging to a file", () => {
     const result: RunResult = {
       iterationsRun: 1,
-      wasCompletionSignalDetected: false,
+      completionSignal: undefined,
       stdout: "",
       commits: [],
       branch: "main",
@@ -126,7 +126,7 @@ describe("RunResult", () => {
   it("allows logFilePath to be absent when logging to stdout", () => {
     const result: RunResult = {
       iterationsRun: 1,
-      wasCompletionSignalDetected: false,
+      completionSignal: undefined,
       stdout: "",
       commits: [],
       branch: "main",

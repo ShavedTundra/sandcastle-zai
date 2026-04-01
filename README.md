@@ -107,7 +107,7 @@ const result = await run({
   logging: { type: "file", path: ".sandcastle/logs/my-run.log" },
   // logging: { type: "stdout" }, // OR render an interactive UI in the terminal
 
-  // String the agent emits to end the iteration loop early.
+  // String (or array of strings) the agent emits to end the iteration loop early.
   // Default: "<promise>COMPLETE</promise>"
   completionSignal: "<promise>COMPLETE</promise>",
 
@@ -116,7 +116,7 @@ const result = await run({
 });
 
 console.log(result.iterationsRun); // number of iterations executed
-console.log(result.wasCompletionSignalDetected); // true if agent emitted <promise>COMPLETE</promise>
+console.log(result.completionSignal); // matched signal string, or undefined if none fired
 console.log(result.commits); // array of { sha } for commits created
 console.log(result.branch); // target branch name
 ```
@@ -198,16 +198,22 @@ When the agent outputs `<promise>COMPLETE</promise>`, the orchestrator stops the
 
 This is useful for task-based workflows where the agent should stop once it has finished, rather than running all remaining iterations.
 
-You can override the default signal by passing `completionSignal` to `run()`:
+You can override the default signal by passing `completionSignal` to `run()`. It accepts a single string or an array of strings:
 
 ```ts
 await run({
   // ...
   completionSignal: "DONE",
 });
+
+// Or pass multiple signals — the loop stops on the first match:
+await run({
+  // ...
+  completionSignal: ["TASK_COMPLETE", "TASK_ABORTED"],
+});
 ```
 
-Tell the agent to output your chosen string in the prompt, and the orchestrator will stop when it detects it.
+Tell the agent to output your chosen string(s) in the prompt, and the orchestrator will stop when it detects any of them. The matched signal is returned as `result.completionSignal`.
 
 ### Templates
 
@@ -263,32 +269,32 @@ Removes the Docker image.
 
 ### `RunOptions`
 
-| Option             | Type       | Default                       | Description                                                     |
-| ------------------ | ---------- | ----------------------------- | --------------------------------------------------------------- |
-| `prompt`           | string     | —                             | Inline prompt (mutually exclusive with `promptFile`)            |
-| `promptFile`       | string     | —                             | Path to prompt file (mutually exclusive with `prompt`)          |
-| `maxIterations`    | number     | `1`                           | Maximum iterations to run                                       |
-| `hooks`            | object     | —                             | Lifecycle hooks (`onSandboxReady`)                              |
-| `branch`           | string     | —                             | Target branch for sandbox work                                  |
-| `model`            | string     | `claude-opus-4-6`             | Model to use for the agent                                      |
-| `imageName`        | string     | `sandcastle:<repo-dir-name>`  | Docker image name for the sandbox                               |
-| `name`             | string     | —                             | Display name for the run, shown as a prefix in log output       |
-| `promptArgs`       | PromptArgs | —                             | Key-value map for `{{KEY}}` placeholder substitution            |
-| `copyToSandbox`    | string[]   | —                             | Host-relative file paths to copy into the worktree before start |
-| `logging`          | object     | file (auto-generated)         | `{ type: 'file', path }` or `{ type: 'stdout' }`                |
-| `completionSignal` | string     | `<promise>COMPLETE</promise>` | Custom string the agent emits to stop the iteration loop early  |
-| `timeoutSeconds`   | number     | `1200`                        | Timeout for the entire run in seconds                           |
+| Option             | Type               | Default                       | Description                                                                 |
+| ------------------ | ------------------ | ----------------------------- | --------------------------------------------------------------------------- |
+| `prompt`           | string             | —                             | Inline prompt (mutually exclusive with `promptFile`)                        |
+| `promptFile`       | string             | —                             | Path to prompt file (mutually exclusive with `prompt`)                      |
+| `maxIterations`    | number             | `1`                           | Maximum iterations to run                                                   |
+| `hooks`            | object             | —                             | Lifecycle hooks (`onSandboxReady`)                                          |
+| `branch`           | string             | —                             | Target branch for sandbox work                                              |
+| `model`            | string             | `claude-opus-4-6`             | Model to use for the agent                                                  |
+| `imageName`        | string             | `sandcastle:<repo-dir-name>`  | Docker image name for the sandbox                                           |
+| `name`             | string             | —                             | Display name for the run, shown as a prefix in log output                   |
+| `promptArgs`       | PromptArgs         | —                             | Key-value map for `{{KEY}}` placeholder substitution                        |
+| `copyToSandbox`    | string[]           | —                             | Host-relative file paths to copy into the worktree before start             |
+| `logging`          | object             | file (auto-generated)         | `{ type: 'file', path }` or `{ type: 'stdout' }`                            |
+| `completionSignal` | string \| string[] | `<promise>COMPLETE</promise>` | String or array of strings the agent emits to stop the iteration loop early |
+| `timeoutSeconds`   | number             | `1200`                        | Timeout for the entire run in seconds                                       |
 
 ### `RunResult`
 
-| Field                         | Type        | Description                                        |
-| ----------------------------- | ----------- | -------------------------------------------------- |
-| `iterationsRun`               | number      | Number of iterations that were executed            |
-| `wasCompletionSignalDetected` | boolean     | Whether the agent signaled completion              |
-| `stdout`                      | string      | Agent output                                       |
-| `commits`                     | `{ sha }[]` | Commits created during the run                     |
-| `branch`                      | string      | Target branch name                                 |
-| `logFilePath`                 | string?     | Path to the log file (only when logging to a file) |
+| Field              | Type        | Description                                                        |
+| ------------------ | ----------- | ------------------------------------------------------------------ |
+| `iterationsRun`    | number      | Number of iterations that were executed                            |
+| `completionSignal` | string?     | The matched completion signal string, or `undefined` if none fired |
+| `stdout`           | string      | Agent output                                                       |
+| `commits`          | `{ sha }[]` | Commits created during the run                                     |
+| `branch`           | string      | Target branch name                                                 |
+| `logFilePath`      | string?     | Path to the log file (only when logging to a file)                 |
 
 Environment variables are resolved automatically from `.sandcastle/.env` and `process.env` — no need to pass them to the API. The required variables depend on the **agent provider** (see `sandcastle init` output for details).
 

@@ -211,7 +211,7 @@ describe("Orchestrator", () => {
     );
 
     expect(result.iterationsRun).toBe(1);
-    expect(result.wasCompletionSignalDetected).toBe(false);
+    expect(result.completionSignal).toBeUndefined();
 
     // Verify the agent's commit was synced back to host
     const content = await readFile(join(hostDir, "agent-output.txt"), "utf-8");
@@ -244,7 +244,7 @@ describe("Orchestrator", () => {
     );
 
     expect(result.iterationsRun).toBe(1);
-    expect(result.wasCompletionSignalDetected).toBe(true);
+    expect(result.completionSignal).toBe("<promise>COMPLETE</promise>");
   });
 
   it("stops early on custom completion signal", async () => {
@@ -273,7 +273,7 @@ describe("Orchestrator", () => {
     );
 
     expect(result.iterationsRun).toBe(1);
-    expect(result.wasCompletionSignalDetected).toBe(true);
+    expect(result.completionSignal).toBe("TASK_FINISHED");
   });
 
   it("does not trigger default completion signal when custom one is set", async () => {
@@ -303,7 +303,94 @@ describe("Orchestrator", () => {
 
     // Custom signal not in output, so all iterations run
     expect(result.iterationsRun).toBe(2);
-    expect(result.wasCompletionSignalDetected).toBe(false);
+    expect(result.completionSignal).toBeUndefined();
+  });
+
+  it("stops early when any signal in an array matches", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "orch-host-"));
+
+    await initRepo(hostDir);
+    await commitFile(hostDir, "hello.txt", "hello", "initial commit");
+
+    // Mock agent: emits the second signal in the array
+    const { factoryLayer, sandboxRepoDir } = makeTestSandboxFactory(
+      hostDir,
+      (dir) =>
+        makeMockAgentLayer(dir, async () => {
+          return "All done. TASK_ABORTED";
+        }),
+    );
+
+    const result = await Effect.runPromise(
+      orchestrate({
+        hostRepoDir: hostDir,
+        sandboxRepoDir,
+        iterations: 5,
+        prompt: "do some work",
+        completionSignal: ["TASK_FINISHED", "TASK_ABORTED"],
+      }).pipe(Effect.provide(Layer.merge(factoryLayer, testDisplayLayer))),
+    );
+
+    expect(result.iterationsRun).toBe(1);
+    expect(result.completionSignal).toBe("TASK_ABORTED");
+  });
+
+  it("returns the matched signal from an array", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "orch-host-"));
+
+    await initRepo(hostDir);
+    await commitFile(hostDir, "hello.txt", "hello", "initial commit");
+
+    // Mock agent: emits the first signal in the array
+    const { factoryLayer, sandboxRepoDir } = makeTestSandboxFactory(
+      hostDir,
+      (dir) =>
+        makeMockAgentLayer(dir, async () => {
+          return "All done. TASK_FINISHED";
+        }),
+    );
+
+    const result = await Effect.runPromise(
+      orchestrate({
+        hostRepoDir: hostDir,
+        sandboxRepoDir,
+        iterations: 5,
+        prompt: "do some work",
+        completionSignal: ["TASK_FINISHED", "TASK_ABORTED"],
+      }).pipe(Effect.provide(Layer.merge(factoryLayer, testDisplayLayer))),
+    );
+
+    expect(result.iterationsRun).toBe(1);
+    expect(result.completionSignal).toBe("TASK_FINISHED");
+  });
+
+  it("runs all iterations when no signal in array matches", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "orch-host-"));
+
+    await initRepo(hostDir);
+    await commitFile(hostDir, "hello.txt", "hello", "initial commit");
+
+    // Mock agent: emits neither signal
+    const { factoryLayer, sandboxRepoDir } = makeTestSandboxFactory(
+      hostDir,
+      (dir) =>
+        makeMockAgentLayer(dir, async () => {
+          return "Still working.";
+        }),
+    );
+
+    const result = await Effect.runPromise(
+      orchestrate({
+        hostRepoDir: hostDir,
+        sandboxRepoDir,
+        iterations: 2,
+        prompt: "do some work",
+        completionSignal: ["TASK_FINISHED", "TASK_ABORTED"],
+      }).pipe(Effect.provide(Layer.merge(factoryLayer, testDisplayLayer))),
+    );
+
+    expect(result.iterationsRun).toBe(2);
+    expect(result.completionSignal).toBeUndefined();
   });
 
   it("runs multiple iterations with re-sync between them", async () => {
@@ -355,7 +442,7 @@ describe("Orchestrator", () => {
     );
 
     expect(result.iterationsRun).toBe(3);
-    expect(result.wasCompletionSignalDetected).toBe(true);
+    expect(result.completionSignal).toBe("<promise>COMPLETE</promise>");
 
     // Verify all 3 iteration files arrived on host
     for (let i = 1; i <= 3; i++) {
@@ -390,7 +477,7 @@ describe("Orchestrator", () => {
     );
 
     expect(result.iterationsRun).toBe(2);
-    expect(result.wasCompletionSignalDetected).toBe(false);
+    expect(result.completionSignal).toBeUndefined();
 
     // Host should still be at the original commit
     const hostHead = await getHead(hostDir);
@@ -434,7 +521,7 @@ describe("Orchestrator", () => {
     );
 
     expect(result.iterationsRun).toBe(2);
-    expect(result.wasCompletionSignalDetected).toBe(true);
+    expect(result.completionSignal).toBe("<promise>COMPLETE</promise>");
     // Untracked file from iteration 1 must not exist in iteration 2's sandbox
     expect(markerExistedInIter2).toBe(false);
   });
@@ -1142,7 +1229,7 @@ describe("Orchestrator error handling", () => {
 
     // Should detect COMPLETE from the stdout fallback
     expect(result.iterationsRun).toBe(1);
-    expect(result.wasCompletionSignalDetected).toBe(true);
+    expect(result.completionSignal).toBe("<promise>COMPLETE</promise>");
   });
 
   it("preserves iteration 1 work when agent fails on iteration 2", async () => {
@@ -1392,7 +1479,7 @@ describe("Orchestrator streaming", () => {
     );
 
     expect(result.iterationsRun).toBe(1);
-    expect(result.wasCompletionSignalDetected).toBe(true);
+    expect(result.completionSignal).toBe("<promise>COMPLETE</promise>");
   });
 
   it("uses DEFAULT_MODEL when no model is specified", async () => {
