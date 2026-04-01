@@ -166,7 +166,7 @@ export interface RunOptions {
   readonly promptArgs?: PromptArgs;
   /** Logging mode (default: { type: 'file' } with auto-generated path under .sandcastle/logs/) */
   readonly logging?: LoggingOption;
-  /** Custom completion signal string or array of strings (default: "<promise>COMPLETE</promise>") */
+  /** Substring(s) the agent emits to stop the iteration loop early. Matched via `includes` against agent output. (default: `"<promise>COMPLETE</promise>"`) */
   readonly completionSignal?: string | string[];
   /** Idle timeout in seconds. If the agent produces no output for this long, it fails. Default: 300 (5 minutes) */
   readonly idleTimeoutSeconds?: number;
