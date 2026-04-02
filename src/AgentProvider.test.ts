@@ -295,7 +295,7 @@ describe("codex factory", () => {
   it("buildPrintCommand shell-escapes the model", () => {
     const provider = codex("gpt-5.4-mini");
     const command = provider.buildPrintCommand("do something");
-    expect(command).toContain("--model 'gpt-5.4-mini'");
+    expect(command).toContain("-m 'gpt-5.4-mini'");
   });
 
   it("buildInteractiveArgs includes the binary and model", () => {
