@@ -1,6 +1,9 @@
 import { Effect, Exit, Layer, Ref } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { AgentError, TimeoutError, WorktreeError } from "./errors.js";
 import { Display, SilentDisplay, type DisplayEntry } from "./Display.js";
 
@@ -11,15 +14,6 @@ vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
-vi.mock("node:fs", async () => {
-  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
-  return {
-    ...actual,
-    statSync: vi.fn(actual.statSync),
-    readFileSync: vi.fn(actual.readFileSync),
-  };
-});
-
 vi.mock("./WorktreeManager.js", () => ({
   create: vi.fn(),
   remove: vi.fn(),
@@ -28,7 +22,6 @@ vi.mock("./WorktreeManager.js", () => ({
 }));
 
 import { execFile } from "node:child_process";
-import { statSync, readFileSync } from "node:fs";
 import * as WorktreeManager from "./WorktreeManager.js";
 import {
   SandboxFactory,
@@ -38,8 +31,6 @@ import {
 } from "./SandboxFactory.js";
 
 const mockExecFile = vi.mocked(execFile);
-const mockStatSync = vi.mocked(statSync);
-const mockReadFileSync = vi.mocked(readFileSync);
 const mockCreate = vi.mocked(WorktreeManager.create);
 const mockRemove = vi.mocked(WorktreeManager.remove);
 const mockPruneStale = vi.mocked(WorktreeManager.pruneStale);
@@ -64,8 +55,16 @@ beforeEach(() => {
 });
 
 describe("WorktreeDockerSandboxFactory", () => {
-  const hostRepoDir = "/host/repo";
-  const worktreePath = "/host/repo/.sandcastle/worktrees/sandcastle-123";
+  let hostRepoDir: string;
+  const worktreePath = "/tmp/sandcastle-worktrees/sandcastle-123";
+  const tempDirs: string[] = [];
+
+  const makeTempRepo = async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sandcastle-test-"));
+    tempDirs.push(dir);
+    await mkdir(join(dir, ".git"));
+    return dir;
+  };
 
   const makeLayer = (
     displayRef = Ref.unsafeMake<ReadonlyArray<DisplayEntry>>([]),
@@ -83,7 +82,8 @@ describe("WorktreeDockerSandboxFactory", () => {
       ),
     );
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    hostRepoDir = await makeTempRepo();
     mockCreate.mockReturnValue(
       Effect.succeed({
         path: worktreePath,
@@ -94,9 +94,14 @@ describe("WorktreeDockerSandboxFactory", () => {
     mockPruneStale.mockReturnValue(Effect.void);
     // Default: clean worktree (no uncommitted changes)
     mockHasUncommittedChanges.mockReturnValue(Effect.succeed(false));
-    // Default: .git is a directory (normal repo)
-    mockStatSync.mockReturnValue({ isDirectory: () => true } as any);
     mockDockerSuccess();
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      tempDirs.map((d) => rm(d, { recursive: true, force: true })),
+    );
+    tempDirs.length = 0;
   });
 
   it("passes branch from config to WorktreeManager.create when branch is specified", async () => {
@@ -170,7 +175,8 @@ describe("WorktreeDockerSandboxFactory", () => {
     const runArgs = capturedArgs().find((args) => args[0] === "run");
     expect(runArgs).toBeDefined();
     expect(runArgs).toContain(`${worktreePath}:${SANDBOX_WORKSPACE_DIR}`);
-    expect(runArgs).toContain(`${hostRepoDir}/.git:${hostRepoDir}/.git`);
+    const gitMount = `${hostRepoDir}/.git:${hostRepoDir}/.git`;
+    expect(runArgs).toContain(gitMount);
   });
 
   it("sets working directory to SANDBOX_WORKSPACE_DIR", async () => {
@@ -542,7 +548,8 @@ describe("WorktreeDockerSandboxFactory", () => {
       const runArgs = capturedArgs().find((args) => args[0] === "run");
       expect(runArgs).toBeDefined();
       expect(runArgs).toContain(`${hostRepoDir}:${SANDBOX_WORKSPACE_DIR}`);
-      expect(runArgs).toContain(`${hostRepoDir}/.git:${hostRepoDir}/.git`);
+      const gitMount = `${hostRepoDir}/.git:${hostRepoDir}/.git`;
+      expect(runArgs).toContain(gitMount);
     });
 
     it("returns undefined preservedWorktreePath", async () => {
@@ -573,8 +580,7 @@ describe("WorktreeDockerSandboxFactory", () => {
     });
 
     it("mounts only one git volume when .git is a directory (normal repo)", async () => {
-      mockStatSync.mockReturnValue({ isDirectory: () => true } as any);
-
+      // hostRepoDir already has .git as a directory from makeTempRepo()
       await Effect.runPromise(
         Effect.gen(function* () {
           const factory = yield* SandboxFactory;
@@ -591,9 +597,18 @@ describe("WorktreeDockerSandboxFactory", () => {
     });
 
     it("mounts both .git file and parent .git dir when .git is a worktree file", async () => {
-      mockStatSync.mockReturnValue({ isDirectory: () => false } as any);
-      mockReadFileSync.mockReturnValue(
-        "gitdir: /real/repo/.git/worktrees/my-worktree\n" as any,
+      // Create a parent repo with .git/worktrees/<name> structure
+      const parentRepoDir = await makeTempRepo();
+      const parentGitDir = join(parentRepoDir, ".git");
+      await mkdir(join(parentGitDir, "worktrees", "my-worktree"), {
+        recursive: true,
+      });
+
+      // Replace .git directory with a worktree file pointing to the parent
+      await rm(join(hostRepoDir, ".git"), { recursive: true });
+      await writeFile(
+        join(hostRepoDir, ".git"),
+        `gitdir: ${parentGitDir}/worktrees/my-worktree\n`,
       );
 
       await Effect.runPromise(
@@ -608,7 +623,7 @@ describe("WorktreeDockerSandboxFactory", () => {
       const gitMounts = runArgs!.filter((arg) => arg.includes(".git"));
       // Should mount both the .git file and the parent .git directory
       expect(gitMounts).toContain(`${hostRepoDir}/.git:${hostRepoDir}/.git`);
-      expect(gitMounts).toContain("/real/repo/.git:/real/repo/.git");
+      expect(gitMounts).toContain(`${parentGitDir}:${parentGitDir}`);
     });
   });
 

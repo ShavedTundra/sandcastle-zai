@@ -160,9 +160,14 @@ export const createSandbox = async (
     );
 
     const gitPath = join(hostRepoDir, ".git");
+    const gitMounts = await Effect.runPromise(
+      resolveGitVolumeMounts(gitPath).pipe(
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    );
     const volumeMounts = [
       `${worktreePath}:${SANDBOX_WORKSPACE_DIR}`,
-      ...resolveGitVolumeMounts(gitPath),
+      ...gitMounts,
     ];
 
     const hostUid = process.getuid?.() ?? 1000;

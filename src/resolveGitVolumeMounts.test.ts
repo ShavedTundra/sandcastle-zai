@@ -1,6 +1,8 @@
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
+import { NodeFileSystem } from "@effect/platform-node";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveGitVolumeMounts } from "./SandboxFactory.js";
 
@@ -18,12 +20,19 @@ describe("resolveGitVolumeMounts", () => {
     dirs.length = 0;
   });
 
+  const run = (gitPath: string) =>
+    Effect.runPromise(
+      resolveGitVolumeMounts(gitPath).pipe(
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    );
+
   it("returns single mount when .git is a directory", async () => {
     const repoDir = await makeTempDir();
     const gitDir = join(repoDir, ".git");
     await mkdir(gitDir);
 
-    const mounts = resolveGitVolumeMounts(gitDir);
+    const mounts = await run(gitDir);
 
     expect(mounts).toEqual([`${gitDir}:${gitDir}`]);
   });
@@ -40,7 +49,7 @@ describe("resolveGitVolumeMounts", () => {
     const gitFile = join(worktreeDir, ".git");
     await writeFile(gitFile, `gitdir: ${parentGitDir}/worktrees/my-worktree\n`);
 
-    const mounts = resolveGitVolumeMounts(gitFile);
+    const mounts = await run(gitFile);
 
     expect(mounts).toEqual([
       `${gitFile}:${gitFile}`,
@@ -53,7 +62,7 @@ describe("resolveGitVolumeMounts", () => {
     const gitFile = join(dir, ".git");
     await writeFile(gitFile, "something unexpected\n");
 
-    const mounts = resolveGitVolumeMounts(gitFile);
+    const mounts = await run(gitFile);
 
     expect(mounts).toEqual([`${gitFile}:${gitFile}`]);
   });
