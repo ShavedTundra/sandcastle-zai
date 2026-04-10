@@ -11,7 +11,7 @@
 A TypeScript library for orchestrating AI coding agents in isolated Docker containers:
 
 1. You invoke agents with a single `sandcastle.run()`.
-2. Sandcastle handles building worktrees and sandboxing the agent.
+2. Sandcastle handles sandboxing the agent with a configurable branch strategy.
 3. The commits made on the branches get merged back.
 
 Great for parallelizing multiple AFK agents, creating review pipelines, or even just orchestrating your own agents.
@@ -90,8 +90,11 @@ const result = await run({
   agent: claudeCode("claude-opus-4-6", { effort: "high" }),
 
   // Sandbox provider — required. Import from "@ai-hero/sandcastle/sandboxes/docker".
-  // Provider-specific config (like imageName) lives inside the provider factory call.
-  sandbox: docker({ imageName: "sandcastle:local" }),
+  // Provider-specific config (like imageName and branchStrategy) lives inside the provider factory call.
+  sandbox: docker({
+    imageName: "sandcastle:local",
+    branchStrategy: { type: "branch", branch: "agent/fix-42" },
+  }),
 
   // Prompt source — provide one of these, not both:
   promptFile: ".sandcastle/prompt.md", // path to a prompt file
@@ -105,22 +108,17 @@ const result = await run({
   // Maximum number of agent iterations to run before stopping. Default: 1
   maxIterations: 5,
 
-  // Worktree mode for sandbox work. Defaults to { mode: 'temp-branch' }.
-  // { mode: 'none' } — bind-mount host working directory directly (no worktree).
-  // { mode: 'temp-branch' } — create a temp worktree, merge back.
-  // { mode: 'branch', branch } — create a worktree on an explicit branch.
-  worktree: { mode: "branch", branch: "agent/fix-42" },
-
   // Display name for this run, shown as a prefix in log output.
   name: "fix-issue-42",
 
   // Lifecycle hooks — arrays of shell commands run sequentially inside the sandbox.
   hooks: {
-    // Runs after the worktree is mounted into the sandbox.
+    // Runs after the sandbox is ready.
     onSandboxReady: [{ command: "npm install" }],
   },
 
-  // Host-relative file paths to copy into the worktree before the container starts.
+  // Host-relative file paths to copy into the sandbox before the container starts.
+  // Not supported with branchStrategy: { type: "head" }.
   copyToSandbox: [".env"],
 
   // How to record progress. Default: write to a file under .sandcastle/logs/
@@ -143,7 +141,7 @@ console.log(result.branch); // target branch name
 
 ### `createSandbox()` — reusable sandbox
 
-Use `createSandbox()` when you need to run multiple agents (or multiple rounds of the same agent) inside a single sandbox. It creates the worktree and container once, and you call `sandbox.run()` as many times as you need. This avoids repeated container startup costs and keeps all runs on the same branch.
+Use `createSandbox()` when you need to run multiple agents (or multiple rounds of the same agent) inside a single sandbox. It creates the sandbox once, and you call `sandbox.run()` as many times as you need. This avoids repeated container startup costs and keeps all runs on the same branch.
 
 Use `run()` instead when you only need a single one-shot invocation — it handles sandbox lifecycle automatically.
 
@@ -196,7 +194,7 @@ Commits from all `run()` calls accumulate on the same branch. The sandbox contai
 
 #### Automatic cleanup with `await using`
 
-`await using` calls `sandbox.close()` automatically when the block exits. If the worktree has uncommitted changes, it is preserved on disk; if clean, both container and worktree are removed.
+`await using` calls `sandbox.close()` automatically when the block exits. If the sandbox has uncommitted changes, the worktree is preserved on disk; if clean, both container and worktree are removed.
 
 #### Manual `close()` with `CloseResult`
 
@@ -214,21 +212,21 @@ if (closeResult.preservedWorktreePath) {
 
 #### `CreateSandboxOptions`
 
-| Option          | Type            | Default | Description                                                         |
-| --------------- | --------------- | ------- | ------------------------------------------------------------------- |
-| `branch`        | string          | —       | **Required.** Explicit branch for the worktree                      |
-| `sandbox`       | SandboxProvider | —       | **Required.** Sandbox provider (e.g. `docker()`)                    |
-| `hooks`         | object          | —       | Lifecycle hooks (`onSandboxReady`) — run once at creation time      |
-| `copyToSandbox` | string[]        | —       | Host-relative file paths to copy into the worktree at creation time |
+| Option          | Type            | Default | Description                                                        |
+| --------------- | --------------- | ------- | ------------------------------------------------------------------ |
+| `branch`        | string          | —       | **Required.** Explicit branch for the sandbox                      |
+| `sandbox`       | SandboxProvider | —       | **Required.** Sandbox provider (e.g. `docker()`)                   |
+| `hooks`         | object          | —       | Lifecycle hooks (`onSandboxReady`) — run once at creation time     |
+| `copyToSandbox` | string[]        | —       | Host-relative file paths to copy into the sandbox at creation time |
 
 #### `Sandbox`
 
 | Property / Method       | Type                                               | Description                                 |
 | ----------------------- | -------------------------------------------------- | ------------------------------------------- |
-| `branch`                | string                                             | The branch the worktree is on               |
+| `branch`                | string                                             | The branch the sandbox is on                |
 | `worktreePath`          | string                                             | Host path to the worktree                   |
 | `run(options)`          | `(SandboxRunOptions) => Promise<SandboxRunResult>` | Invoke an agent inside the existing sandbox |
-| `close()`               | `() => Promise<CloseResult>`                       | Tear down the container and worktree        |
+| `close()`               | `() => Promise<CloseResult>`                       | Tear down the container and sandbox         |
 | `[Symbol.asyncDispose]` | `() => Promise<void>`                              | Auto teardown via `await using`             |
 
 #### `SandboxRunOptions`
@@ -263,14 +261,15 @@ if (closeResult.preservedWorktreePath) {
 
 ## How it works
 
-Sandcastle uses a worktree-based architecture for agent execution:
+Sandcastle uses a **branch strategy** configured on the sandbox provider to control how the agent's changes relate to branches. There are three strategies:
 
-- **Worktree**: Sandcastle creates a git worktree on the host at `.sandcastle/worktrees/`. The worktree is a just a normal `git worktree`.
-- **Bind-mount**: The worktree directory is bind-mounted into the sandbox container as the agent's working directory. The agent writes directly to the host filesystem through the mount.
-- **No sync needed**: Because the agent writes directly to the host filesystem, there are no sync-in or sync-out operations. Commits made by the agent are immediately visible on the host.
-- **Merge back**: After the run completes, the temp worktree branch is fast-forward merged back to the target branch, and the worktree is cleaned up.
+- **Head** (`{ type: "head" }`) — The agent writes directly to the host working directory. No worktree, no branch indirection. This is the default for bind-mount providers like `docker()`.
+- **Merge-to-head** (`{ type: "merge-to-head" }`) — Sandcastle creates a temporary branch in a git worktree. The agent works on the temp branch, and changes are merged back to HEAD when done. The temp branch is cleaned up after merge.
+- **Branch** (`{ type: "branch", branch: "foo" }`) — Commits land on an explicitly named branch in a git worktree.
 
-From your point of view, you just run `sandcastle.run({ worktree: { mode: 'branch', branch: 'foo' } })`, and get a commit on branch `foo` once it's complete. All 100% local.
+For bind-mount providers (like Docker), the worktree directory is bind-mounted into the container — the agent writes directly to the host filesystem through the mount, so no sync is needed.
+
+From your point of view, you just configure `docker({ branchStrategy: { type: 'branch', branch: 'foo' } })`, and get a commit on branch `foo` once it's complete. All 100% local.
 
 ## Prompts
 
@@ -291,7 +290,7 @@ You must provide exactly one of:
 
 Use `` !`command` `` expressions in your prompt to pull in dynamic context. Each expression is replaced with the command's stdout before the prompt is sent to the agent.
 
-Commands run **inside the sandbox** after the worktree is mounted and `onSandboxReady` hooks complete, so they see the same repo state the agent sees (including installed dependencies).
+Commands run **inside the sandbox** after `onSandboxReady` hooks complete, so they see the same repo state the agent sees (including installed dependencies).
 
 ```markdown
 # Open issues
@@ -336,10 +335,10 @@ A `{{KEY}}` placeholder with no matching prompt argument is an error. Unused pro
 
 Sandcastle automatically injects two built-in prompt arguments into every prompt:
 
-| Placeholder         | Value                                                                |
-| ------------------- | -------------------------------------------------------------------- |
-| `{{SOURCE_BRANCH}}` | The branch the agent works on inside the worktree (temp or explicit) |
-| `{{TARGET_BRANCH}}` | The host's active branch at `run()` time                             |
+| Placeholder         | Value                                                             |
+| ------------------- | ----------------------------------------------------------------- |
+| `{{SOURCE_BRANCH}}` | The branch the agent works on (determined by the branch strategy) |
+| `{{TARGET_BRANCH}}` | The host's active branch at `run()` time                          |
 
 Use them in your prompt without passing them via `promptArgs`:
 
@@ -405,7 +404,7 @@ Creates the following files:
 ├── Dockerfile      # Sandbox environment (customize as needed)
 ├── prompt.md       # Agent instructions
 ├── .env.example    # Token placeholders
-└── .gitignore      # Ignores .env, logs/, worktrees/
+└── .gitignore      # Ignores .env, logs/
 ```
 
 Errors if `.sandcastle/` already exists to prevent overwriting customizations.
@@ -502,7 +501,7 @@ Hooks are arrays of `{ "command": "..." }` objects executed sequentially inside 
 | ---------------- | -------------------------- | ---------------------- |
 | `onSandboxReady` | After the sandbox is ready | Sandbox repo directory |
 
-**`onSandboxReady`** runs after the worktree is mounted into the sandbox. Use it for dependency installation or build steps (e.g., `npm install`).
+**`onSandboxReady`** runs after the sandbox is ready. Use it for dependency installation or build steps (e.g., `npm install`).
 
 Pass hooks programmatically via `run()`:
 
