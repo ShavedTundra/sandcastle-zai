@@ -208,13 +208,16 @@ export const run = async (options: RunOptions): Promise<RunResult> => {
       : undefined;
 
   // Also support legacy worktree option as fallback
-  const effectiveBranchType: "head" | "merge-to-head" | "branch" =
-    branchStrategy?.type ??
-    (options.worktree?.mode === "none"
-      ? "head"
-      : options.worktree?.mode === "branch"
-        ? "branch"
-        : "merge-to-head");
+  let effectiveBranchType: "head" | "merge-to-head" | "branch";
+  if (branchStrategy) {
+    effectiveBranchType = branchStrategy.type;
+  } else if (options.worktree?.mode === "none") {
+    effectiveBranchType = "head";
+  } else if (options.worktree?.mode === "branch") {
+    effectiveBranchType = "branch";
+  } else {
+    effectiveBranchType = "merge-to-head";
+  }
 
   // Validate: copyToSandbox is incompatible with head strategy
   if (
@@ -229,11 +232,12 @@ export const run = async (options: RunOptions): Promise<RunResult> => {
   }
 
   // Extract explicit branch when in branch mode
-  const branch =
-    effectiveBranchType === "branch"
-      ? ((branchStrategy as { type: "branch"; branch: string })?.branch ??
-        (options.worktree as { mode: "branch"; branch: string })?.branch)
-      : undefined;
+  let branch: string | undefined;
+  if (branchStrategy?.type === "branch") {
+    branch = branchStrategy.branch;
+  } else if (options.worktree?.mode === "branch") {
+    branch = options.worktree.branch;
+  }
 
   const hostRepoDir = process.cwd();
 
