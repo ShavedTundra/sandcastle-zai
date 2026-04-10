@@ -1,5 +1,6 @@
 import { exec } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -305,6 +306,146 @@ describe("syncOut", () => {
       const log = await getLog(hostDir);
       expect(log).toHaveLength(2);
       expect(log[0]).toContain("add new");
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("successful sync-out leaves no patch artifacts in .sandcastle/patches", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "host-"));
+    await initRepo(hostDir);
+    await commitFile(hostDir, "initial.txt", "initial", "initial commit");
+
+    const provider = testIsolated();
+    const handle = await provider.create({ env: {} });
+    try {
+      await syncIn(hostDir, handle);
+
+      const wp = handle.workspacePath;
+      await handle.exec('echo "new file" > new.txt', { cwd: wp });
+      await handle.exec("git add new.txt", { cwd: wp });
+      await handle.exec('git commit -m "add new file"', { cwd: wp });
+
+      // Also add uncommitted + untracked changes
+      await handle.exec('echo "modified" > initial.txt', { cwd: wp });
+      await handle.exec('echo "untracked" > untracked.txt', { cwd: wp });
+
+      await syncOut(hostDir, handle);
+
+      // Verify sync worked
+      const log = await getLog(hostDir);
+      expect(log).toHaveLength(2);
+      expect(log[0]).toContain("add new file");
+
+      // Verify no patch artifacts remain
+      const patchesDir = join(hostDir, ".sandcastle", "patches");
+      expect(existsSync(patchesDir)).toBe(false);
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("failed git am preserves artifacts and prints recovery message", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "host-"));
+    await initRepo(hostDir);
+    await commitFile(hostDir, "initial.txt", "initial", "initial commit");
+
+    const provider = testIsolated();
+    const handle = await provider.create({ env: {} });
+    try {
+      await syncIn(hostDir, handle);
+
+      const wp = handle.workspacePath;
+      // Create a commit in the sandbox that modifies initial.txt
+      await handle.exec('echo "sandbox change" > initial.txt', { cwd: wp });
+      await handle.exec("git add initial.txt", { cwd: wp });
+      await handle.exec('git commit -m "sandbox edit"', { cwd: wp });
+
+      // Create dirty working tree on host that conflicts with the patch
+      // (git am refuses to apply when working tree has conflicting changes)
+      await writeFile(join(hostDir, "initial.txt"), "host dirty change\n");
+
+      // Capture stderr
+      const stderrChunks: string[] = [];
+      const originalError = console.error;
+      console.error = (...args: unknown[]) => {
+        stderrChunks.push(args.map(String).join(" "));
+      };
+
+      try {
+        await syncOut(hostDir, handle);
+      } finally {
+        console.error = originalError;
+      }
+
+      // Verify patch artifacts are preserved
+      const patchesDir = join(hostDir, ".sandcastle", "patches");
+      expect(existsSync(patchesDir)).toBe(true);
+
+      const timestampDirs = await readdir(patchesDir);
+      expect(timestampDirs).toHaveLength(1);
+      expect(timestampDirs[0]).toMatch(/^\d{8}-\d{6}/);
+
+      const artifactDir = join(patchesDir, timestampDirs[0]!);
+      const files = await readdir(artifactDir);
+      // Should have at least one .patch file
+      expect(files.some((f) => f.endsWith(".patch"))).toBe(true);
+
+      // Verify recovery message was printed
+      const stderrOutput = stderrChunks.join("\n");
+      expect(stderrOutput).toContain("Patch application failed");
+      expect(stderrOutput).toContain("git am --continue");
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("failed git apply preserves diff artifact with recovery message", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "host-"));
+    await initRepo(hostDir);
+    await commitFile(hostDir, "initial.txt", "initial", "initial commit");
+
+    const provider = testIsolated();
+    const handle = await provider.create({ env: {} });
+    try {
+      await syncIn(hostDir, handle);
+
+      const wp = handle.workspacePath;
+      // Make uncommitted changes in sandbox
+      await handle.exec('echo "sandbox uncommitted" > initial.txt', {
+        cwd: wp,
+      });
+
+      // Make conflicting uncommitted changes on host
+      await writeFile(join(hostDir, "initial.txt"), "host conflicting\n");
+
+      const stderrChunks: string[] = [];
+      const originalError = console.error;
+      console.error = (...args: unknown[]) => {
+        stderrChunks.push(args.map(String).join(" "));
+      };
+
+      try {
+        await syncOut(hostDir, handle);
+      } finally {
+        console.error = originalError;
+      }
+
+      // Verify patch artifacts are preserved
+      const patchesDir = join(hostDir, ".sandcastle", "patches");
+      expect(existsSync(patchesDir)).toBe(true);
+
+      const timestampDirs = await readdir(patchesDir);
+      expect(timestampDirs).toHaveLength(1);
+
+      const artifactDir = join(patchesDir, timestampDirs[0]!);
+      const files = await readdir(artifactDir);
+      expect(files).toContain("changes.patch");
+
+      // Verify recovery message mentions git apply
+      const stderrOutput = stderrChunks.join("\n");
+      expect(stderrOutput).toContain("Patch application failed");
+      expect(stderrOutput).toContain("git apply");
     } finally {
       await handle.close();
     }

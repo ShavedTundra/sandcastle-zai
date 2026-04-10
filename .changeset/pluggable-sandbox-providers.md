@@ -19,3 +19,4 @@
 - Git format-patch/am sync-out for committed changes
 - Git diff/apply sync-out for uncommitted changes
 - Untracked file extraction via `copyOut` back to the host
+- Artifact persistence and recovery for failed sync-out (patches saved to `.sandcastle/patches/<timestamp>/`)
