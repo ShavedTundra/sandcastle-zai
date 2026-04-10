@@ -474,7 +474,7 @@ Environment variables are resolved automatically from `.sandcastle/.env` and `pr
 Sandcastle ships with a Docker provider, but you can create your own. A sandbox provider tells Sandcastle how to execute commands in an isolated environment. There are two kinds:
 
 - **Bind-mount** — the sandbox can mount a host directory. Sandcastle creates a worktree on the host and the provider mounts it in. No file sync needed. Use this for Docker, Podman, or any local container runtime.
-- **Isolated** — the sandbox has its own filesystem (e.g. a cloud VM). The provider handles syncing code in and extracting commits out via `copyIn`, `copyOut`, and `extractCommits`. Use this when the sandbox cannot access the host filesystem.
+- **Isolated** — the sandbox has its own filesystem (e.g. a cloud VM). The provider handles syncing code in and out via `copyIn` and `copyOut`. Use this when the sandbox cannot access the host filesystem.
 
 ### The sandbox handle contract
 
