@@ -59,6 +59,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     hooks,
     copyToSandbox,
     sandbox: docker(),
+    branchStrategy: { type: "merge-to-head" },
     name: "implementer",
     maxIterations: 100,
     agent: sandcastle.claudeCode("claude-sonnet-4-6"),
