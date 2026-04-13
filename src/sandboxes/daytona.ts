@@ -104,19 +104,59 @@ export const daytona = (options?: DaytonaOptions): IsolatedSandboxProvider =>
           onLine: (line: string) => void,
           opts?: { cwd?: string },
         ): Promise<ExecResult> => {
-          const response = await sandbox.process.executeCommand(
-            command,
-            opts?.cwd ?? workspacePath,
-          );
-          const lines = response.result.split("\n");
-          for (const line of lines) {
-            onLine(line);
+          const sessionId = `sandcastle-${crypto.randomUUID()}`;
+          await sandbox.process.createSession(sessionId);
+
+          try {
+            const execResponse = await sandbox.process.executeSessionCommand(
+              sessionId,
+              {
+                command: `cd ${opts?.cwd ?? workspacePath} && ${command}`,
+                async: true,
+              },
+            );
+
+            const cmdId = execResponse.cmdId!;
+
+            const stdoutLines: string[] = [];
+            const stderrChunks: string[] = [];
+            let partial = "";
+
+            await sandbox.process.getSessionCommandLogs(
+              sessionId,
+              cmdId,
+              (chunk: string) => {
+                const text = partial + chunk;
+                const lines = text.split("\n");
+                partial = lines.pop() ?? "";
+                for (const line of lines) {
+                  stdoutLines.push(line);
+                  onLine(line);
+                }
+              },
+              (chunk: string) => {
+                stderrChunks.push(chunk);
+              },
+            );
+
+            if (partial) {
+              stdoutLines.push(partial);
+              onLine(partial);
+            }
+
+            const cmdInfo = await sandbox.process.getSessionCommand(
+              sessionId,
+              cmdId,
+            );
+
+            return {
+              stdout: stdoutLines.join("\n"),
+              stderr: stderrChunks.join(""),
+              exitCode: cmdInfo.exitCode ?? 0,
+            };
+          } finally {
+            await sandbox.process.deleteSession(sessionId).catch(() => {});
           }
-          return {
-            stdout: response.result,
-            stderr: "",
-            exitCode: response.exitCode,
-          };
         },
 
         copyIn: async (
