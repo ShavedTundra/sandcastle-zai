@@ -288,12 +288,12 @@ const initCommand = Command.make(
         const containerfileDir = join(cwd, CONFIG_DIR);
         if (selectedSandboxProvider.name === "podman") {
           yield* d.spinner(
-            `Building Podman image '${imageName}'...`,
+            `Building ${providerLabel} image '${imageName}'...`,
             podmanBuildImage(imageName, containerfileDir),
           );
         } else {
           yield* d.spinner(
-            `Building Docker image '${imageName}'...`,
+            `Building ${providerLabel} image '${imageName}'...`,
             buildImage(imageName, containerfileDir),
           );
         }
