@@ -128,8 +128,9 @@ export const podman = (options?: PodmanOptions): SandboxProvider => {
             workspacePath,
             ...envArgs,
             ...volumeArgs,
-            imageName,
+            "--entrypoint",
             "sleep",
+            imageName,
             "infinity",
           ],
           (error) => {

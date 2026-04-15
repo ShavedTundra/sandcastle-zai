@@ -71,8 +71,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\
   && apt-get update && apt-get install -y gh \\
   && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user for Claude to run as
-RUN useradd -m -s /bin/bash agent
+# Rename the base image's "node" user (UID 1000) to "agent".
+# This keeps UID 1000 so that --userns=keep-id (Podman) and
+# --user 1000:1000 (Docker) map to the correct home directory owner.
+RUN usermod -d /home/agent -m -l agent node
 USER agent
 
 # Install Claude Code CLI
@@ -106,8 +108,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\
   && apt-get update && apt-get install -y gh \\
   && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m -s /bin/bash agent
+# Rename the base image's "node" user (UID 1000) to "agent".
+# This keeps UID 1000 so that --userns=keep-id (Podman) and
+# --user 1000:1000 (Docker) map to the correct home directory owner.
+RUN usermod -d /home/agent -m -l agent node
 
 # Install pi coding agent (run as root before USER agent)
 RUN npm install -g @mariozechner/pi-coding-agent
@@ -139,8 +143,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\
   && apt-get update && apt-get install -y gh \\
   && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m -s /bin/bash agent
+# Rename the base image's "node" user (UID 1000) to "agent".
+# This keeps UID 1000 so that --userns=keep-id (Podman) and
+# --user 1000:1000 (Docker) map to the correct home directory owner.
+RUN usermod -d /home/agent -m -l agent node
 
 # Install Codex CLI (run as root before USER agent)
 RUN npm install -g @openai/codex
@@ -172,8 +178,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\
   && apt-get update && apt-get install -y gh \\
   && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m -s /bin/bash agent
+# Rename the base image's "node" user (UID 1000) to "agent".
+# This keeps UID 1000 so that --userns=keep-id (Podman) and
+# --user 1000:1000 (Docker) map to the correct home directory owner.
+RUN usermod -d /home/agent -m -l agent node
 
 # Install OpenCode CLI (run as root before USER agent)
 RUN npm install -g opencode-ai@latest
