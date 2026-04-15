@@ -1,10 +1,8 @@
 import * as sandcastle from "@ai-hero/sandcastle";
-import { vercel } from "@ai-hero/sandcastle/sandboxes/vercel";
-import { docker } from "../dist/sandboxes/docker";
+import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 
 // /matt-pococks-projects/sandcastle
 const { commits, branch } = await sandcastle.interactive({
-  sandbox: docker(),
   branchStrategy: {
     type: "merge-to-head",
   },

@@ -33,12 +33,13 @@ import {
   findMissingPromptArgKeys,
   BUILT_IN_PROMPT_ARG_KEYS,
 } from "./PromptArgumentSubstitution.js";
+import { noSandbox } from "./sandboxes/no-sandbox.js";
 
 export interface InteractiveOptions {
   /** Agent provider to use (e.g. claudeCode("claude-opus-4-6")) */
   readonly agent: AgentProvider;
   /** Sandbox provider (e.g. docker(), noSandbox()). */
-  readonly sandbox: AnySandboxProvider;
+  readonly sandbox?: AnySandboxProvider;
   /** Inline prompt string (mutually exclusive with promptFile). */
   readonly prompt?: string;
   /** Path to a prompt file (mutually exclusive with prompt). */
@@ -85,15 +86,17 @@ export const interactive = async (
 ): Promise<InteractiveResult> => {
   const { prompt, promptFile, hooks, agent: provider } = options;
 
+  const resolvedSandbox = options.sandbox ?? noSandbox();
+
   // Derive branch strategy
   const branchStrategy: BranchStrategy =
     options.branchStrategy ??
-    (options.sandbox.tag === "isolated"
+    (resolvedSandbox.tag === "isolated"
       ? { type: "merge-to-head" }
       : { type: "head" }); // "bind-mount" and "none" both default to head
 
   // Validate: head strategy is not supported with isolated providers
-  if (branchStrategy.type === "head" && options.sandbox.tag === "isolated") {
+  if (branchStrategy.type === "head" && resolvedSandbox.tag === "isolated") {
     throw new Error(
       "head branch strategy is not supported with isolated providers",
     );
@@ -123,7 +126,7 @@ export const interactive = async (
 
   const hostRepoDir = process.cwd();
   const isHeadMode = branchStrategy.type === "head";
-  const sandboxProvider = options.sandbox;
+  const sandboxProvider = resolvedSandbox;
 
   const inner = Effect.gen(function* () {
     const d = yield* Display;
