@@ -746,7 +746,7 @@ describe("InitService scaffold", () => {
       expect(mainTs).toContain("claude-opus-4-6");
     });
 
-    it("implement-prompt.md contains {{ISSUE_NUMBER}}, {{ISSUE_TITLE}}, {{BRANCH}} prompt arguments", async () => {
+    it("implement-prompt.md contains {{TASK_ID}}, {{ISSUE_TITLE}}, {{BRANCH}} prompt arguments", async () => {
       const dir = await makeDir();
       await runScaffold(dir, { templateName: "parallel-planner" });
 
@@ -754,7 +754,7 @@ describe("InitService scaffold", () => {
         join(dir, ".sandcastle", "implement-prompt.md"),
         "utf-8",
       );
-      expect(prompt).toContain("{{ISSUE_NUMBER}}");
+      expect(prompt).toContain("{{TASK_ID}}");
       expect(prompt).toContain("{{ISSUE_TITLE}}");
       expect(prompt).toContain("{{BRANCH}}");
     });
@@ -908,7 +908,7 @@ describe("InitService scaffold", () => {
       expect(mergerSection).toContain("maxIterations: 1");
     });
 
-    it("implement-prompt.md contains {{ISSUE_NUMBER}}, {{ISSUE_TITLE}}, {{BRANCH}} prompt arguments", async () => {
+    it("implement-prompt.md contains {{TASK_ID}}, {{ISSUE_TITLE}}, {{BRANCH}} prompt arguments", async () => {
       const dir = await makeDir();
       await runScaffold(dir, { templateName: "parallel-planner-with-review" });
 
@@ -916,7 +916,7 @@ describe("InitService scaffold", () => {
         join(dir, ".sandcastle", "implement-prompt.md"),
         "utf-8",
       );
-      expect(prompt).toContain("{{ISSUE_NUMBER}}");
+      expect(prompt).toContain("{{TASK_ID}}");
       expect(prompt).toContain("{{ISSUE_TITLE}}");
       expect(prompt).toContain("{{BRANCH}}");
     });
@@ -1135,6 +1135,144 @@ describe("InitService scaffold", () => {
       // Should default to github-issues and replace placeholders
       expect(prompt).toContain("gh issue list");
       expect(prompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+    });
+
+    // --- sequential-reviewer ---
+
+    it("sequential-reviewer with github-issues produces implement-prompt with gh issue commands", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "sequential-reviewer",
+        backlogManager: getBacklogManager("github-issues"),
+      });
+
+      const prompt = await readFile(
+        join(dir, ".sandcastle", "implement-prompt.md"),
+        "utf-8",
+      );
+      expect(prompt).toContain("gh issue list");
+      expect(prompt).toContain("labels");
+      expect(prompt).toContain("comments");
+      expect(prompt).toContain("gh issue close");
+      expect(prompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+      expect(prompt).not.toContain("{{CLOSE_TASK_COMMAND}}");
+    });
+
+    it("sequential-reviewer with beads produces implement-prompt with bd commands", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "sequential-reviewer",
+        backlogManager: getBacklogManager("beads"),
+      });
+
+      const prompt = await readFile(
+        join(dir, ".sandcastle", "implement-prompt.md"),
+        "utf-8",
+      );
+      expect(prompt).toContain("bd ready --json");
+      expect(prompt).toContain("bd close");
+      expect(prompt).not.toContain("gh issue");
+      expect(prompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+      expect(prompt).not.toContain("{{CLOSE_TASK_COMMAND}}");
+    });
+
+    // --- blank ---
+
+    it("blank with github-issues produces prompt with gh issue list example", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "blank",
+        backlogManager: getBacklogManager("github-issues"),
+      });
+
+      const prompt = await readFile(
+        join(dir, ".sandcastle", "prompt.md"),
+        "utf-8",
+      );
+      expect(prompt).toContain("gh issue list");
+      expect(prompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+    });
+
+    it("blank with beads produces prompt with bd ready example", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "blank",
+        backlogManager: getBacklogManager("beads"),
+      });
+
+      const prompt = await readFile(
+        join(dir, ".sandcastle", "prompt.md"),
+        "utf-8",
+      );
+      expect(prompt).toContain("bd ready --json");
+      expect(prompt).not.toContain("gh issue");
+      expect(prompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+    });
+
+    // --- parallel-planner ---
+
+    it("parallel-planner with github-issues produces plan-prompt with gh issue commands", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner",
+        backlogManager: getBacklogManager("github-issues"),
+      });
+
+      const planPrompt = await readFile(
+        join(dir, ".sandcastle", "plan-prompt.md"),
+        "utf-8",
+      );
+      expect(planPrompt).toContain("gh issue list");
+      expect(planPrompt).toContain("labels");
+      expect(planPrompt).toContain("comments");
+      expect(planPrompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+    });
+
+    it("parallel-planner with beads produces plan-prompt with bd commands", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner",
+        backlogManager: getBacklogManager("beads"),
+      });
+
+      const planPrompt = await readFile(
+        join(dir, ".sandcastle", "plan-prompt.md"),
+        "utf-8",
+      );
+      expect(planPrompt).toContain("bd ready --json");
+      expect(planPrompt).not.toContain("gh issue");
+      expect(planPrompt).not.toContain("{{LIST_TASKS_COMMAND}}");
+    });
+
+    it("parallel-planner main.mts uses id:string and TASK_ID", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner",
+      });
+
+      const main = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      expect(main).toContain("id: string");
+      expect(main).toContain("TASK_ID: issue.id");
+      expect(main).not.toContain("number: number");
+      expect(main).not.toContain("ISSUE_NUMBER");
+      expect(main).not.toContain("`  #${");
+    });
+
+    it("parallel-planner implement-prompt uses TASK_ID placeholder", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner",
+      });
+
+      const prompt = await readFile(
+        join(dir, ".sandcastle", "implement-prompt.md"),
+        "utf-8",
+      );
+      expect(prompt).toContain("{{TASK_ID}}");
+      expect(prompt).not.toContain("{{ISSUE_NUMBER}}");
     });
   });
 
