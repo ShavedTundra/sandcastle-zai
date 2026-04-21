@@ -1,13 +1,24 @@
+import { join } from "node:path";
 import { Deferred, Effect } from "effect";
 import { Display } from "./Display.js";
 import { preprocessPrompt } from "./PromptPreprocessor.js";
-import { AgentError, AgentIdleTimeoutError } from "./errors.js";
+import {
+  AgentError,
+  AgentIdleTimeoutError,
+  SessionCaptureError,
+} from "./errors.js";
 import type { SandboxError } from "./errors.js";
 import type { SandboxService } from "./SandboxFactory.js";
-import { SandboxFactory } from "./SandboxFactory.js";
+import { SandboxFactory, SANDBOX_REPO_DIR } from "./SandboxFactory.js";
 import { withSandboxLifecycle, type SandboxHooks } from "./SandboxLifecycle.js";
 import type { AgentProvider } from "./AgentProvider.js";
 import { TextDeltaBuffer } from "./TextDeltaBuffer.js";
+import {
+  encodeProjectPath,
+  hostSessionStore,
+  sandboxSessionStore,
+  transferSession,
+} from "./SessionStore.js";
 
 export type { ParsedStreamEvent } from "./AgentProvider.js";
 
@@ -133,12 +144,16 @@ export interface OrchestrateOptions {
   readonly name?: string;
   /** @internal Test-only override for the idle warning interval in milliseconds. Default: 60000 (1 minute). */
   readonly _idleWarningIntervalMs?: number;
+  /** @internal Override for the host projects directory (for testing). */
+  readonly _hostProjectsDir?: string;
 }
 
 /** Per-iteration result carrying an optional session ID. */
 export interface IterationResult {
   /** Claude Code session ID extracted from the init line, or undefined for non-Claude agents. */
   readonly sessionId?: string;
+  /** Absolute host path to the captured session JSONL, or undefined when capture is disabled or provider is non-Claude. */
+  readonly sessionFilePath?: string;
 }
 
 export interface OrchestrateResult {
@@ -185,7 +200,7 @@ export const orchestrate = (
       yield* display.status(label(`Iteration ${i}/${iterations}`), "info");
 
       const sandboxResult = yield* factory.withSandbox(
-        ({ hostWorktreePath, sandboxRepoPath, applyToHost }) =>
+        ({ hostWorktreePath, sandboxRepoPath, applyToHost, bindMountHandle }) =>
           withSandboxLifecycle(
             {
               hostRepoDir,
@@ -242,6 +257,47 @@ export const orchestrate = (
 
                 yield* display.status(label("Agent stopped"), "info");
 
+                // Capture session while sandbox is still alive
+                let sessionFilePath: string | undefined;
+                if (provider.captureSessions && sessionId && bindMountHandle) {
+                  yield* display.status(label("Capturing session"), "info");
+                  const sandboxCwd = ctx.sandboxRepoDir;
+                  const sandboxProjectsDir = join(
+                    "/home/agent",
+                    ".claude",
+                    "projects",
+                  );
+                  const sbStore = sandboxSessionStore(
+                    sandboxCwd,
+                    bindMountHandle,
+                    sandboxProjectsDir,
+                  );
+                  const hStore = hostSessionStore(
+                    hostRepoDir,
+                    options._hostProjectsDir,
+                  );
+                  sessionFilePath = yield* Effect.tryPromise({
+                    try: async () => {
+                      await transferSession(sbStore, hStore, sessionId);
+                      const encoded = encodeProjectPath(hostRepoDir);
+                      const projectsDir =
+                        options._hostProjectsDir ??
+                        join(process.env.HOME ?? "~", ".claude", "projects");
+                      return join(
+                        projectsDir,
+                        encoded,
+                        "sessions",
+                        `${sessionId}.jsonl`,
+                      );
+                    },
+                    catch: (e) =>
+                      new SessionCaptureError({
+                        message: `Session capture failed: ${e instanceof Error ? e.message : String(e)}`,
+                        sessionId,
+                      }),
+                  });
+                }
+
                 // Check completion signal
                 const matchedSignal = completionSignals.find((sig) =>
                   agentOutput.includes(sig),
@@ -250,6 +306,7 @@ export const orchestrate = (
                   completionSignal: matchedSignal,
                   stdout: agentOutput,
                   sessionId,
+                  sessionFilePath,
                 } as const;
               }),
           ),
@@ -261,7 +318,11 @@ export const orchestrate = (
       allCommits.push(...lifecycleResult.commits);
       allStdout += lifecycleResult.result.stdout;
       resolvedBranch = lifecycleResult.branch;
-      allIterations.push({ sessionId: lifecycleResult.result.sessionId });
+
+      allIterations.push({
+        sessionId: lifecycleResult.result.sessionId,
+        sessionFilePath: lifecycleResult.result.sessionFilePath,
+      });
 
       if (lifecycleResult.result.completionSignal !== undefined) {
         yield* display.status(

@@ -598,3 +598,27 @@ describe("opencode factory", () => {
     expect(provider.env).toEqual({});
   });
 });
+
+describe("captureSessions flag", () => {
+  it("claudeCode defaults captureSessions to true", () => {
+    expect(claudeCode("claude-opus-4-6").captureSessions).toBe(true);
+  });
+
+  it("claudeCode allows opting out of captureSessions", () => {
+    expect(
+      claudeCode("claude-opus-4-6", { captureSessions: false }).captureSessions,
+    ).toBe(false);
+  });
+
+  it("pi has captureSessions false", () => {
+    expect(pi("pi-model").captureSessions).toBe(false);
+  });
+
+  it("codex has captureSessions false", () => {
+    expect(codex("codex-model").captureSessions).toBe(false);
+  });
+
+  it("opencode has captureSessions false", () => {
+    expect(opencode("opencode-model").captureSessions).toBe(false);
+  });
+});

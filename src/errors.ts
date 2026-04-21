@@ -159,6 +159,14 @@ export const withTimeout =
       }),
     );
 
+/** Session capture (read, rewrite, or write) failed */
+export class SessionCaptureError extends Data.TaggedError(
+  "SessionCaptureError",
+)<{
+  readonly message: string;
+  readonly sessionId: string;
+}> {}
+
 /** Union of all sandbox-related errors */
 export type SandboxError =
   | ExecError
@@ -181,4 +189,5 @@ export type SandboxError =
   | GitSetupTimeoutError
   | PromptExpansionTimeoutError
   | CommitCollectionTimeoutError
-  | MergeToHostTimeoutError;
+  | MergeToHostTimeoutError
+  | SessionCaptureError;

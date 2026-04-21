@@ -141,6 +141,8 @@ export interface SandboxInfo {
   /** Sync changes from the sandbox to the host worktree.
    *  For isolated providers, runs syncOut. For bind-mount providers, this is a no-op. */
   readonly applyToHost: () => Effect.Effect<void, SyncError>;
+  /** The bind-mount sandbox handle, available when the provider is a bind-mount provider. Used for session capture. */
+  readonly bindMountHandle?: BindMountSandboxHandle;
 }
 
 export interface WithSandboxResult<A> {
@@ -438,11 +440,12 @@ export const WorktreeDockerSandboxFactory = {
                     repoDir: SANDBOX_REPO_DIR,
                   }),
                   // Use
-                  ({ sandboxLayer, worktreePath }) =>
+                  ({ sandboxLayer, worktreePath, handle }) =>
                     makeEffect({
                       hostWorktreePath: hostRepoDir,
                       sandboxRepoPath: worktreePath,
                       applyToHost: () => Effect.void,
+                      bindMountHandle: handle as BindMountSandboxHandle,
                     }).pipe(Effect.provide(sandboxLayer)) as Effect.Effect<
                       A,
                       E | SandboxError,
@@ -524,11 +527,12 @@ export const WorktreeDockerSandboxFactory = {
               }),
             ),
             // Use
-            ({ worktreeInfo, sandboxLayer, worktreePath }) =>
+            ({ worktreeInfo, sandboxLayer, worktreePath, handle }) =>
               makeEffect({
                 hostWorktreePath: worktreeInfo.path,
                 sandboxRepoPath: worktreePath,
                 applyToHost: () => Effect.void,
+                bindMountHandle: handle as BindMountSandboxHandle,
               }).pipe(Effect.provide(sandboxLayer)) as Effect.Effect<
                 A,
                 E | SandboxError,

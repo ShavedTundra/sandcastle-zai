@@ -175,6 +175,34 @@ describe("RunResult", () => {
     };
     expect(result.iterations[0]!.sessionId).toBeUndefined();
   });
+
+  it("carries sessionFilePath when session capture is enabled", () => {
+    const result: RunResult = {
+      iterations: [
+        {
+          sessionId: "abc-123",
+          sessionFilePath:
+            "/home/user/.claude/projects/-home-user-repo/sessions/abc-123.jsonl",
+        },
+      ],
+      completionSignal: undefined,
+      stdout: "",
+      commits: [],
+      branch: "main",
+    };
+    expect(result.iterations[0]!.sessionFilePath).toContain("abc-123.jsonl");
+  });
+
+  it("has undefined sessionFilePath when capture is disabled", () => {
+    const result: RunResult = {
+      iterations: [{ sessionId: "abc-123", sessionFilePath: undefined }],
+      completionSignal: undefined,
+      stdout: "",
+      commits: [],
+      branch: "main",
+    };
+    expect(result.iterations[0]!.sessionFilePath).toBeUndefined();
+  });
 });
 
 describe("DEFAULT_MAX_ITERATIONS", () => {

@@ -80,6 +80,8 @@ export interface AgentProvider {
   readonly name: string;
   /** Environment variables injected by this agent provider. Merged at launch time with env resolver and sandbox provider env. */
   readonly env: Record<string, string>;
+  /** When true, session capture is enabled for this provider. Default: true for Claude Code, false for others. */
+  readonly captureSessions: boolean;
   buildPrintCommand(options: AgentCommandOptions): string;
   buildInteractiveArgs?(options: AgentCommandOptions): string[];
   parseStreamLine(line: string): ParsedStreamEvent[];
@@ -153,6 +155,7 @@ export interface PiOptions {
 export const pi = (model: string, options?: PiOptions): AgentProvider => ({
   name: "pi",
   env: options?.env ?? {},
+  captureSessions: false,
 
   buildPrintCommand({ prompt }: AgentCommandOptions): string {
     return `pi -p --mode json --no-session --model ${shellEscape(model)} ${shellEscape(prompt)}`;
@@ -220,6 +223,7 @@ export const codex = (
 ): AgentProvider => ({
   name: "codex",
   env: options?.env ?? {},
+  captureSessions: false,
 
   buildPrintCommand({ prompt }: AgentCommandOptions): string {
     const effortFlag = options?.effort
@@ -255,6 +259,7 @@ export const opencode = (
 ): AgentProvider => ({
   name: "opencode",
   env: options?.env ?? {},
+  captureSessions: false,
 
   buildPrintCommand({ prompt }: AgentCommandOptions): string {
     return `opencode run --model ${shellEscape(model)} ${shellEscape(prompt)}`;
@@ -279,6 +284,8 @@ export interface ClaudeCodeOptions {
   readonly effort?: "low" | "medium" | "high" | "max";
   /** Environment variables injected by this agent provider. */
   readonly env?: Record<string, string>;
+  /** When false, session capture is disabled. Default: true. */
+  readonly captureSessions?: boolean;
 }
 
 export const claudeCode = (
@@ -287,6 +294,7 @@ export const claudeCode = (
 ): AgentProvider => ({
   name: "claude-code",
   env: options?.env ?? {},
+  captureSessions: options?.captureSessions ?? true,
 
   buildPrintCommand({
     prompt,

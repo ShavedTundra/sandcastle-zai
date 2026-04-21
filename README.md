@@ -655,9 +655,16 @@ Removes the Podman image.
 
 ### `IterationResult`
 
-| Field       | Type    | Description                                                                     |
-| ----------- | ------- | ------------------------------------------------------------------------------- |
-| `sessionId` | string? | Claude Code session ID from the init line, or `undefined` for non-Claude agents |
+| Field             | Type    | Description                                                                          |
+| ----------------- | ------- | ------------------------------------------------------------------------------------ |
+| `sessionId`       | string? | Claude Code session ID from the init line, or `undefined` for non-Claude agents      |
+| `sessionFilePath` | string? | Absolute host path to the captured session JSONL, or `undefined` when capture is off |
+
+### Session capture
+
+After each Claude Code iteration, Sandcastle automatically captures the agent's session JSONL from the sandbox to the host at `~/.claude/projects/<encoded-path>/sessions/<session-id>.jsonl`. The `cwd` fields inside each JSONL entry are rewritten to match the host repo root, so `claude --resume` works natively.
+
+Session capture is enabled by default for `claudeCode()` and can be opted out via `captureSessions: false`. Non-Claude agent providers never attempt capture. Capture failure fails the run.
 
 ### `ClaudeCodeOptions`
 
@@ -667,10 +674,11 @@ The `claudeCode()` factory accepts an optional second argument for provider-spec
 agent: claudeCode("claude-opus-4-6", { effort: "high" });
 ```
 
-| Option   | Type                                         | Default | Description                                             |
-| -------- | -------------------------------------------- | ------- | ------------------------------------------------------- |
-| `effort` | `"low"` \| `"medium"` \| `"high"` \| `"max"` | —       | Claude Code reasoning effort level (`max` is Opus only) |
-| `env`    | `Record<string, string>`                     | `{}`    | Environment variables injected by this agent provider   |
+| Option            | Type                                         | Default | Description                                               |
+| ----------------- | -------------------------------------------- | ------- | --------------------------------------------------------- |
+| `effort`          | `"low"` \| `"medium"` \| `"high"` \| `"max"` | —       | Claude Code reasoning effort level (`max` is Opus only)   |
+| `env`             | `Record<string, string>`                     | `{}`    | Environment variables injected by this agent provider     |
+| `captureSessions` | `boolean`                                    | `true`  | Capture agent session JSONL to host for `claude --resume` |
 
 ### `CodexOptions`
 
