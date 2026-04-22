@@ -117,7 +117,7 @@ export const normalizeMounts = <
     // sandbox paths like /mnt/data or /home/agent/workspace), leave it as-is.
     // Otherwise, normalize it — Windows-style sandboxPaths (from resolveGitMounts
     // setting sandboxPath === hostPath) need remapping.
-    if (sandboxPath.match(/^[A-Za-z]:[/\\]/) || sandboxPath.includes("\\")) {
+    if (/^[A-Za-z]:[/\\]/.test(sandboxPath) || sandboxPath.includes("\\")) {
       // This is a Windows-style path — remap it
       const normalizedSandboxPath = sandboxPath.replace(/\\/g, "/");
 

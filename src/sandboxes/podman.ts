@@ -342,8 +342,8 @@ export const podman = (options?: PodmanOptions): SandboxProvider => {
   });
 };
 
-// Re-export defaultImageName from shared module for backwards compatibility
-export { defaultImageName } from "../mountUtils.js";
+// Re-export for backwards compatibility
+export { defaultImageName };
 
 const checkImageExists = (imageName: string): Promise<void> =>
   new Promise<void>((resolve, reject) => {

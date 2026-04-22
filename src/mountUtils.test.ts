@@ -11,9 +11,7 @@ import { SANDBOX_REPO_DIR } from "./SandboxFactory.js";
 
 vi.mock("node:fs", () => ({
   existsSync: (p: string) =>
-    p === "/existing/path" ||
-    p === "/home/testuser/data" ||
-    p === "C:/Users/project/cache",
+    p === "/existing/path" || p === "/home/testuser/data",
 }));
 
 vi.mock("node:os", () => ({

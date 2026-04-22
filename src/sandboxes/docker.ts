@@ -264,5 +264,5 @@ export const docker = (options?: DockerOptions): SandboxProvider => {
   });
 };
 
-// Re-export defaultImageName from shared module for backwards compatibility
-export { defaultImageName } from "../mountUtils.js";
+// Re-export for backwards compatibility
+export { defaultImageName };
