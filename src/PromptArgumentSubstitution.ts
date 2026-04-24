@@ -24,6 +24,23 @@ const PLACEHOLDER_PATTERN = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
  * Validates that the user has not provided any built-in prompt argument keys.
  * Fails with a PromptError if any built-in key is found in `args`.
  */
+/**
+ * Fails if the user passed any `promptArgs` alongside an inline prompt.
+ * Inline prompts are delivered to the agent verbatim, so `promptArgs` would
+ * silently do nothing. An empty object is treated as absent.
+ */
+export const validateNoArgsWithInlinePrompt = (
+  args: PromptArgs,
+): Effect.Effect<void, PromptError> => {
+  if (Object.keys(args).length === 0) return Effect.void;
+  return Effect.fail(
+    new PromptError({
+      message:
+        'promptArgs is only supported with promptFile. Inline prompts (prompt: "...") are passed to the agent as-is — interpolate values directly in JavaScript, or switch to promptFile to use {{KEY}} substitution.',
+    }),
+  );
+};
+
 export const validateNoBuiltInArgOverride = (
   args: PromptArgs,
 ): Effect.Effect<void, PromptError> => {

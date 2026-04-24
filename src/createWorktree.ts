@@ -44,6 +44,7 @@ import { resolveCwd } from "./resolveCwd.js";
 import {
   type PromptArgs,
   substitutePromptArgs,
+  validateNoArgsWithInlinePrompt,
   validateNoBuiltInArgOverride,
   BUILT_IN_PROMPT_ARG_KEYS,
 } from "./PromptArgumentSubstitution.js";
@@ -216,7 +217,10 @@ export const createWorktree = async (
     yield* WorktreeManager.pruneStale(hostRepoDir).pipe(
       Effect.catchAll(() => Effect.void),
     );
-    const info = yield* WorktreeManager.create(hostRepoDir, { branch, baseBranch });
+    const info = yield* WorktreeManager.create(hostRepoDir, {
+      branch,
+      baseBranch,
+    });
     if (options.copyToWorktree && options.copyToWorktree.length > 0) {
       yield* copyToWorktree(options.copyToWorktree, hostRepoDir, info.path);
     }
@@ -271,9 +275,11 @@ export const createWorktree = async (
 
       // 1. Resolve prompt (from string or file), or skip if neither provided
       const hasPromptSource = prompt !== undefined || promptFile !== undefined;
-      const rawPrompt = hasPromptSource
+      const resolved = hasPromptSource
         ? yield* resolvePrompt({ prompt, promptFile })
-        : "";
+        : undefined;
+      const rawPrompt = resolved?.text ?? "";
+      const isInlinePrompt = resolved?.source === "inline";
 
       // 2. Resolve env vars
       const resolvedEnv = yield* resolveEnv(hostRepoDir);
@@ -284,9 +290,9 @@ export const createWorktree = async (
       });
       const effectiveEnv = { ...env, ...(opts.env ?? {}) };
 
-      // 3. Prompt args substitution (skip when no prompt)
+      // 3. Prompt args substitution (skip when no prompt, or when inline passthrough)
       let substitutedPrompt = rawPrompt;
-      if (hasPromptSource) {
+      if (hasPromptSource && !isInlinePrompt) {
         const userArgs = opts.promptArgs ?? {};
         yield* validateNoBuiltInArgOverride(userArgs);
 
@@ -301,6 +307,8 @@ export const createWorktree = async (
           effectiveArgs,
           builtInArgKeysSet,
         );
+      } else if (isInlinePrompt) {
+        yield* validateNoArgsWithInlinePrompt(opts.promptArgs ?? {});
       }
 
       // Display intro
@@ -377,13 +385,14 @@ export const createWorktree = async (
           },
           (ctx) =>
             Effect.gen(function* () {
-              const fullPrompt = hasPromptSource
-                ? yield* preprocessPrompt(
-                    substitutedPrompt,
-                    ctx.sandbox,
-                    ctx.sandboxRepoDir,
-                  )
-                : "";
+              const fullPrompt =
+                !hasPromptSource || isInlinePrompt
+                  ? substitutedPrompt
+                  : yield* preprocessPrompt(
+                      substitutedPrompt,
+                      ctx.sandbox,
+                      ctx.sandboxRepoDir,
+                    );
 
               const interactiveArgs = provider.buildInteractiveArgs!({
                 prompt: fullPrompt,
@@ -475,7 +484,9 @@ export const createWorktree = async (
 
     const inner = Effect.gen(function* () {
       // 1. Resolve prompt
-      const rawPrompt = yield* resolvePrompt({ prompt, promptFile });
+      const resolved = yield* resolvePrompt({ prompt, promptFile });
+      const rawPrompt = resolved.text;
+      const isInlinePrompt = resolved.source === "inline";
 
       // 2. Resolve env vars
       const resolvedEnv = yield* resolveEnv(hostRepoDir);
@@ -486,20 +497,26 @@ export const createWorktree = async (
       });
       const effectiveEnv = { ...env, ...(opts.env ?? {}) };
 
-      // 3. Prompt args substitution
+      // 3. Prompt args substitution (skipped for inline prompts — passthrough)
       const userArgs = opts.promptArgs ?? {};
-      yield* validateNoBuiltInArgOverride(userArgs);
-      const effectiveArgs = {
-        SOURCE_BRANCH: worktreeInfo.branch,
-        TARGET_BRANCH: worktreeInfo.branch,
-        ...userArgs,
-      };
-      const builtInArgKeysSet = new Set<string>(BUILT_IN_PROMPT_ARG_KEYS);
-      const resolvedPrompt = yield* substitutePromptArgs(
-        rawPrompt,
-        effectiveArgs,
-        builtInArgKeysSet,
-      );
+      let resolvedPrompt: string;
+      if (isInlinePrompt) {
+        yield* validateNoArgsWithInlinePrompt(userArgs);
+        resolvedPrompt = rawPrompt;
+      } else {
+        yield* validateNoBuiltInArgOverride(userArgs);
+        const effectiveArgs = {
+          SOURCE_BRANCH: worktreeInfo.branch,
+          TARGET_BRANCH: worktreeInfo.branch,
+          ...userArgs,
+        };
+        const builtInArgKeysSet = new Set<string>(BUILT_IN_PROMPT_ARG_KEYS);
+        resolvedPrompt = yield* substitutePromptArgs(
+          rawPrompt,
+          effectiveArgs,
+          builtInArgKeysSet,
+        );
+      }
 
       // 4. Start sandbox
       let handle: BindMountSandboxHandle | IsolatedSandboxHandle;
@@ -599,6 +616,7 @@ export const createWorktree = async (
           name: opts.name,
           resumeSession: opts.resumeSession,
           signal: opts.signal,
+          skipPromptExpansion: isInlinePrompt,
         });
       }).pipe(
         Effect.provide(runLayer),

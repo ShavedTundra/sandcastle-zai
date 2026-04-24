@@ -1908,6 +1908,66 @@ describe("Orchestrator prompt preprocessing", () => {
 
     expect(capturedStdin).toContain("Just a plain prompt with no commands.");
   });
+
+  it("passes prompt through literally when skipPromptExpansion is true", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "orch-skipexp-host-"));
+
+    await initRepo(hostDir);
+    await commitFile(hostDir, "hello.txt", "hello", "initial commit");
+
+    let capturedStdin = "";
+
+    const { factoryLayer } = makeTestSandboxFactory(hostDir, (dir) => {
+      const fsLayer = makeLocalSandboxLayer(dir);
+      return Layer.succeed(Sandbox, {
+        exec: (command, options) => {
+          if (command.startsWith("claude ") && options?.onLine) {
+            const onLine = options.onLine;
+            capturedStdin = options?.stdin ?? "";
+            const output = "Done.";
+            const streamOutput = toStreamJson(output);
+            for (const line of streamOutput.split("\n")) {
+              onLine(line);
+            }
+            return Effect.succeed({
+              stdout: streamOutput,
+              stderr: "",
+              exitCode: 0,
+            });
+          }
+          return Effect.flatMap(Sandbox, (real) =>
+            real.exec(command, options),
+          ).pipe(Effect.provide(fsLayer));
+        },
+        copyIn: (hostPath, sandboxPath) =>
+          Effect.flatMap(Sandbox, (real) =>
+            real.copyIn(hostPath, sandboxPath),
+          ).pipe(Effect.provide(fsLayer)),
+        copyFileOut: (sandboxPath, hostPath) =>
+          Effect.flatMap(Sandbox, (real) =>
+            real.copyFileOut(sandboxPath, hostPath),
+          ).pipe(Effect.provide(fsLayer)),
+      });
+    });
+
+    const literalPrompt =
+      "Context: !`echo hello-from-sandbox`\n\n{{ISSUE_NUMBER}} should pass through.";
+
+    await Effect.runPromise(
+      orchestrate({
+        provider: testProvider,
+        hostRepoDir: hostDir,
+        iterations: 1,
+        prompt: literalPrompt,
+        skipPromptExpansion: true,
+      }).pipe(Effect.provide(Layer.merge(factoryLayer, testDisplayLayer))),
+    );
+
+    // Both the shell expression and the {{KEY}} placeholder are delivered verbatim.
+    expect(capturedStdin).toContain("!`echo hello-from-sandbox`");
+    expect(capturedStdin).toContain("{{ISSUE_NUMBER}}");
+    expect(capturedStdin).not.toContain("hello-from-sandbox\n");
+  });
 });
 
 describe("Orchestrator Display integration", () => {

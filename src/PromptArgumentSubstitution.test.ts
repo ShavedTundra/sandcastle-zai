@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { type DisplayEntry, SilentDisplay } from "./Display.js";
 import {
   substitutePromptArgs,
+  validateNoArgsWithInlinePrompt,
   validateNoBuiltInArgOverride,
   findMissingPromptArgKeys,
   BUILT_IN_PROMPT_ARG_KEYS,
@@ -238,6 +239,32 @@ describe("validateNoBuiltInArgOverride", () => {
     expect(error).toBeInstanceOf(PromptError);
     expect(error.message).toContain("TARGET_BRANCH");
     expect(error.message).toContain("built-in");
+  });
+});
+
+describe("validateNoArgsWithInlinePrompt", () => {
+  it("succeeds when promptArgs is empty", async () => {
+    await expect(
+      Effect.runPromise(validateNoArgsWithInlinePrompt({})),
+    ).resolves.toBeUndefined();
+  });
+
+  it("fails with PromptError when promptArgs has any key", async () => {
+    const error = await Effect.runPromise(
+      validateNoArgsWithInlinePrompt({ ISSUE: "42" }).pipe(Effect.flip),
+    );
+    expect(error).toBeInstanceOf(PromptError);
+    expect(error.message).toContain("promptArgs");
+    expect(error.message).toContain("promptFile");
+  });
+
+  it("fails even when only a built-in arg key is present", async () => {
+    const error = await Effect.runPromise(
+      validateNoArgsWithInlinePrompt({ SOURCE_BRANCH: "main" }).pipe(
+        Effect.flip,
+      ),
+    );
+    expect(error).toBeInstanceOf(PromptError);
   });
 });
 

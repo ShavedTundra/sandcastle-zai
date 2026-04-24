@@ -33,6 +33,7 @@ import { generateTempBranchName, getCurrentBranch } from "./WorktreeManager.js";
 import {
   type PromptArgs,
   substitutePromptArgs,
+  validateNoArgsWithInlinePrompt,
   validateNoBuiltInArgOverride,
   BUILT_IN_PROMPT_ARG_KEYS,
 } from "./PromptArgumentSubstitution.js";
@@ -296,11 +297,13 @@ export const run = async (options: RunOptions): Promise<RunResult> => {
   }
 
   // Resolve prompt
-  const rawPrompt = await Effect.runPromise(
+  const resolved = await Effect.runPromise(
     resolvePrompt({ prompt, promptFile }).pipe(
       Effect.provide(NodeContext.layer),
     ),
   );
+  const rawPrompt = resolved.text;
+  const isInlinePrompt = resolved.source === "inline";
 
   const agentName = provider.name;
 
@@ -394,24 +397,28 @@ export const run = async (options: RunOptions): Promise<RunResult> => {
     });
     yield* d.summary("Sandcastle Run", rows);
 
-    // Validate that the user has not provided built-in prompt argument keys
     const userArgs = options.promptArgs ?? {};
-    yield* validateNoBuiltInArgOverride(userArgs);
 
-    // Build effective args: built-in args merged with user-provided args.
-    // In none mode, resolvedBranch is already currentHostBranch, so
-    // SOURCE_BRANCH and TARGET_BRANCH both resolve to the host's current branch.
-    const effectiveArgs = {
-      SOURCE_BRANCH: resolvedBranch,
-      TARGET_BRANCH: currentHostBranch,
-      ...userArgs,
-    };
-    const builtInArgKeysSet = new Set<string>(BUILT_IN_PROMPT_ARG_KEYS);
-    const resolvedPrompt = yield* substitutePromptArgs(
-      rawPrompt,
-      effectiveArgs,
-      builtInArgKeysSet,
-    );
+    // Inline prompts pass through to the agent literally — no substitution,
+    // no built-in arg injection. Guard against silently ignoring promptArgs.
+    let resolvedPrompt: string;
+    if (isInlinePrompt) {
+      yield* validateNoArgsWithInlinePrompt(userArgs);
+      resolvedPrompt = rawPrompt;
+    } else {
+      yield* validateNoBuiltInArgOverride(userArgs);
+      const effectiveArgs = {
+        SOURCE_BRANCH: resolvedBranch,
+        TARGET_BRANCH: currentHostBranch,
+        ...userArgs,
+      };
+      const builtInArgKeysSet = new Set<string>(BUILT_IN_PROMPT_ARG_KEYS);
+      resolvedPrompt = yield* substitutePromptArgs(
+        rawPrompt,
+        effectiveArgs,
+        builtInArgKeysSet,
+      );
+    }
 
     // In head mode, pass the host branch so SandboxLifecycle skips the merge step.
     // In merge-to-head mode, branch is undefined (triggers merge). In branch mode, it's the explicit branch.
@@ -430,6 +437,7 @@ export const run = async (options: RunOptions): Promise<RunResult> => {
       name: options.name,
       resumeSession: options.resumeSession,
       signal: options.signal,
+      skipPromptExpansion: isInlinePrompt,
     });
 
     const completion = buildCompletionMessage(

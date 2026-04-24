@@ -1,4 +1,4 @@
-import { readFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -648,6 +648,59 @@ describe("promptFile resolution with cwd", () => {
   });
 });
 
+describe("inline prompt passthrough", () => {
+  it("errors when promptArgs is passed alongside an inline prompt", async () => {
+    await expect(
+      run({
+        agent: claudeCode("claude-opus-4-6"),
+        sandbox: testSandbox,
+        prompt: "do the work",
+        branchStrategy: { type: "head" },
+        promptArgs: { ISSUE_NUMBER: "42" },
+      }),
+    ).rejects.toThrow("promptArgs is only supported with promptFile");
+  });
+
+  it("does not error on inline prompts that contain literal {{KEY}} text (issue #453)", async () => {
+    // Before the fix, this would fail with "Prompt argument \"{{BRANCH}}\" has no
+    // matching value". With inline passthrough, {{KEY}} is delivered literally
+    // and substitution is skipped entirely, so no scan happens.
+    //
+    // The run still fails (fake sandbox can't actually run the agent) but the
+    // failure must not be a prompt-substitution error.
+    const promise = run({
+      agent: claudeCode("claude-opus-4-6"),
+      sandbox: testSandbox,
+      prompt: "Issue body mentions {{BRANCH}} in its content.",
+      branchStrategy: { type: "head" },
+    });
+
+    await promise.catch((err: Error) => {
+      expect(err.message).not.toContain("matching value in promptArgs");
+      expect(err.message).not.toContain("{{BRANCH}}");
+    });
+  });
+
+  it("accepts inline prompt with empty promptArgs ({})", async () => {
+    // Spreading `...opts` where `opts.promptArgs` defaults to {} is a common
+    // pattern. An empty args object is semantically the same as "not provided"
+    // and must not trigger the inline-prompt guard.
+    const promise = run({
+      agent: claudeCode("claude-opus-4-6"),
+      sandbox: testSandbox,
+      prompt: "do the work",
+      branchStrategy: { type: "head" },
+      promptArgs: {},
+    });
+
+    await promise.catch((err: Error) => {
+      expect(err.message).not.toContain(
+        "promptArgs is only supported with promptFile",
+      );
+    });
+  });
+});
+
 describe("run() error logging to file", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
 
@@ -661,12 +714,14 @@ describe("run() error logging to file", () => {
   it("writes SandboxError to log file when using file logging", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sandcastle-run-error-"));
     const logPath = join(dir, "test.log");
+    const promptFile = join(dir, "prompt.md");
+    writeFileSync(promptFile, "test prompt");
 
     await expect(
       run({
         agent: claudeCode("claude-opus-4-6"),
         sandbox: testSandbox,
-        prompt: "test prompt",
+        promptFile,
         branchStrategy: { type: "head" },
         promptArgs: { SOURCE_BRANCH: "override" },
         logging: { type: "file", path: logPath },
@@ -681,12 +736,14 @@ describe("run() error logging to file", () => {
   it("still propagates the error as a rejected promise", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sandcastle-run-error-"));
     const logPath = join(dir, "test.log");
+    const promptFile = join(dir, "prompt.md");
+    writeFileSync(promptFile, "test prompt");
 
     await expect(
       run({
         agent: claudeCode("claude-opus-4-6"),
         sandbox: testSandbox,
-        prompt: "test prompt",
+        promptFile,
         branchStrategy: { type: "head" },
         promptArgs: { SOURCE_BRANCH: "override" },
         logging: { type: "file", path: logPath },

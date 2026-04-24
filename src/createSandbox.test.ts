@@ -1135,10 +1135,13 @@ describe("createSandbox", () => {
       cwd: hostDir,
     });
 
+    const promptFile = join(hostDir, "interactive-args-prompt.md");
+    await writeFile(promptFile, "Fix bug in {{COMPONENT}}");
+
     try {
       await sandbox.interactive({
         agent: testProvider,
-        prompt: "Fix bug in {{COMPONENT}}",
+        promptFile,
         promptArgs: { COMPONENT: "LoginForm" },
       });
 

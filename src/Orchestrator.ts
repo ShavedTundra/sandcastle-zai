@@ -192,6 +192,8 @@ export interface OrchestrateOptions {
   readonly resumeSession?: string;
   /** An AbortSignal that cancels the orchestration when aborted. */
   readonly signal?: AbortSignal;
+  /** When true, skip prompt expansion (shell expression evaluation). Set for dynamic inline prompts. */
+  readonly skipPromptExpansion?: boolean;
 }
 
 /** Per-iteration result carrying an optional session ID. */
@@ -294,12 +296,15 @@ export const orchestrate = (
                   });
                 }
 
-                // Preprocess prompt (run !`command` expressions inside sandbox)
-                const fullPrompt = yield* preprocessPrompt(
-                  prompt,
-                  ctx.sandbox,
-                  ctx.sandboxRepoDir,
-                );
+                // Preprocess prompt (run !`command` expressions inside sandbox).
+                // Inline prompts pass through literally — skip expansion.
+                const fullPrompt = options.skipPromptExpansion
+                  ? prompt
+                  : yield* preprocessPrompt(
+                      prompt,
+                      ctx.sandbox,
+                      ctx.sandboxRepoDir,
+                    );
 
                 yield* display.status(label("Agent started"), "success");
 

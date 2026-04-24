@@ -16,6 +16,7 @@ import { defaultSessionPathsLayer } from "./SessionPaths.js";
 import {
   type PromptArgs,
   substitutePromptArgs,
+  validateNoArgsWithInlinePrompt,
   validateNoBuiltInArgOverride,
   BUILT_IN_PROMPT_ARG_KEYS,
 } from "./PromptArgumentSubstitution.js";
@@ -219,11 +220,13 @@ const buildSandboxHandle = (
         maxIterations = 1,
       } = runOptions;
 
-      const rawPrompt = await Effect.runPromise(
+      const resolved = await Effect.runPromise(
         resolvePrompt({ prompt, promptFile }).pipe(
           Effect.provide(NodeContext.layer),
         ),
       );
+      const rawPrompt = resolved.text;
+      const isInlinePrompt = resolved.source === "inline";
 
       const userArgs = runOptions.promptArgs ?? {};
       const currentHostBranch = await Effect.runPromise(
@@ -235,6 +238,10 @@ const buildSandboxHandle = (
 
       const resolvedPrompt = await Effect.runPromise(
         Effect.gen(function* () {
+          if (isInlinePrompt) {
+            yield* validateNoArgsWithInlinePrompt(userArgs);
+            return rawPrompt;
+          }
           yield* validateNoBuiltInArgOverride(userArgs);
           const effectiveArgs = {
             SOURCE_BRANCH: branch,
@@ -313,6 +320,7 @@ const buildSandboxHandle = (
               idleTimeoutSeconds: runOptions.idleTimeoutSeconds,
               name: runOptions.name,
               signal: runOptions.signal,
+              skipPromptExpansion: isInlinePrompt,
             });
           }).pipe(Effect.provide(runLayer)),
         );
@@ -359,24 +367,34 @@ const buildSandboxHandle = (
       try {
         lifecycleResult = await Effect.runPromise(
           Effect.gen(function* () {
-            const rawPrompt = yield* resolvePrompt({ prompt, promptFile });
+            const resolved = yield* resolvePrompt({ prompt, promptFile });
+            const rawPrompt = resolved.text;
+            const isInlinePrompt = resolved.source === "inline";
 
             const userArgs = interactiveOptions.promptArgs ?? {};
             const currentHostBranch =
               yield* WorktreeManager.getCurrentBranch(hostRepoDir);
 
-            yield* validateNoBuiltInArgOverride(userArgs);
-            const effectiveArgs = {
-              SOURCE_BRANCH: branch,
-              TARGET_BRANCH: currentHostBranch,
-              ...userArgs,
-            };
-            const builtInArgKeysSet = new Set<string>(BUILT_IN_PROMPT_ARG_KEYS);
-            const resolvedPrompt = yield* substitutePromptArgs(
-              rawPrompt,
-              effectiveArgs,
-              builtInArgKeysSet,
-            );
+            let resolvedPrompt: string;
+            if (isInlinePrompt) {
+              yield* validateNoArgsWithInlinePrompt(userArgs);
+              resolvedPrompt = rawPrompt;
+            } else {
+              yield* validateNoBuiltInArgOverride(userArgs);
+              const effectiveArgs = {
+                SOURCE_BRANCH: branch,
+                TARGET_BRANCH: currentHostBranch,
+                ...userArgs,
+              };
+              const builtInArgKeysSet = new Set<string>(
+                BUILT_IN_PROMPT_ARG_KEYS,
+              );
+              resolvedPrompt = yield* substitutePromptArgs(
+                rawPrompt,
+                effectiveArgs,
+                builtInArgKeysSet,
+              );
+            }
 
             return yield* withSandboxLifecycle(
               {
@@ -388,11 +406,13 @@ const buildSandboxHandle = (
               },
               (ctx) =>
                 Effect.gen(function* () {
-                  const fullPrompt = yield* preprocessPrompt(
-                    resolvedPrompt,
-                    ctx.sandbox,
-                    ctx.sandboxRepoDir,
-                  );
+                  const fullPrompt = isInlinePrompt
+                    ? resolvedPrompt
+                    : yield* preprocessPrompt(
+                        resolvedPrompt,
+                        ctx.sandbox,
+                        ctx.sandboxRepoDir,
+                      );
 
                   const interactiveArgs = provider.buildInteractiveArgs!({
                     prompt: fullPrompt,
