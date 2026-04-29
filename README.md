@@ -27,7 +27,7 @@ Sandcastle is provider-agnostic — it ships with built-in providers for Docker,
 
 ## Quick start
 
-1. Install the package as a dev dependency (Sandcastle is a dev/CI tool — it orchestrates agents during development, not at runtime):
+1. Install the package:
 
 ```bash
 npm install --save-dev @ai-hero/sandcastle
