@@ -28,8 +28,9 @@ export const copyToWorktree = (
   hostRepoDir: string,
   worktreePath: string,
   timeoutMs?: number,
-): Effect.Effect<void, CopyToWorktreeTimeoutError | CopyToWorktreeError> =>
-  Effect.gen(function* () {
+): Effect.Effect<void, CopyToWorktreeTimeoutError | CopyToWorktreeError> => {
+  const effectiveTimeout = timeoutMs ?? COPY_TO_WORKTREE_TIMEOUT_MS;
+  return Effect.gen(function* () {
     const cowFlags = getCopyOnWriteFlags(process.platform);
     for (const relativePath of paths) {
       const src = join(hostRepoDir, relativePath);
@@ -68,12 +69,13 @@ export const copyToWorktree = (
     }
   }).pipe(
     withTimeout(
-      timeoutMs ?? COPY_TO_WORKTREE_TIMEOUT_MS,
+      effectiveTimeout,
       () =>
         new CopyToWorktreeTimeoutError({
-          message: `Copying files to worktree timed out after ${timeoutMs ?? COPY_TO_WORKTREE_TIMEOUT_MS}ms`,
-          timeoutMs: timeoutMs ?? COPY_TO_WORKTREE_TIMEOUT_MS,
+          message: `Copying files to worktree timed out after ${effectiveTimeout}ms`,
+          timeoutMs: effectiveTimeout,
           paths,
         }),
     ),
   );
+};
