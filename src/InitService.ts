@@ -104,9 +104,11 @@ RUN apt-get update && apt-get install -y \\
 RUN usermod -d /home/agent -m -l agent node
 
 # Install pi coding agent (run as root before USER agent)
-RUN npm install -g @mariozechner/pi-coding-agent
+RUN npm install -g @mariozechner/pi-coding-agent@0.72.0
 
 USER agent
+
+COPY extensions/zai-provider/ /home/agent/.pi/agent/extensions/zai-provider/
 
 WORKDIR /home/agent
 
@@ -187,12 +189,12 @@ ANTHROPIC_API_KEY=`,
   },
   {
     name: "pi",
-    label: "Pi",
-    defaultModel: "claude-sonnet-4-6",
+    label: "Pi + Z.ai",
+    defaultModel: "glm-5.1",
     factoryImport: "pi",
     dockerfileTemplate: PI_DOCKERFILE,
-    envExample: `# Anthropic API key
-ANTHROPIC_API_KEY=`,
+    envExample: `# Z.ai API key
+ZAI_API_KEY=`,
   },
   {
     name: "codex",
