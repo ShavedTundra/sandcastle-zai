@@ -198,7 +198,7 @@ export const withSandboxLifecycle = <A>(
         yield* execOkWithGitTimeout(
           sandbox,
           `git config --global --add safe.directory "${sandboxRepoDir}"`,
-        );
+        ).pipe(Effect.catchAll(() => Effect.void));
 
         // Propagate host git identity into the sandbox so commits are attributed
         // to the actual developer without requiring manual setup.
@@ -206,13 +206,13 @@ export const withSandboxLifecycle = <A>(
           yield* execOkWithGitTimeout(
             sandbox,
             `git config --global user.name "${hostGitName.replace(/"/g, '\\"')}"`,
-          );
+          ).pipe(Effect.catchAll(() => Effect.void));
         }
         if (hostGitEmail) {
           yield* execOkWithGitTimeout(
             sandbox,
             `git config --global user.email "${hostGitEmail.replace(/"/g, '\\"')}"`,
-          );
+          ).pipe(Effect.catchAll(() => Effect.void));
         }
 
         // Repo is bind-mounted — discover branch directly
