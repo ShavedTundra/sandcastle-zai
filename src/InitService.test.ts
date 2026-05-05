@@ -70,7 +70,7 @@ describe("Agent registry", () => {
     const agent = getAgent("pi");
     expect(agent).toBeDefined();
     expect(agent!.name).toBe("pi");
-    expect(agent!.defaultModel).toBe("claude-sonnet-4-6");
+    expect(agent!.defaultModel).toBe("glm-5.1");
     expect(agent!.factoryImport).toBe("pi");
     expect(agent!.dockerfileTemplate).toContain("FROM");
     expect(agent!.dockerfileTemplate).toContain(
@@ -139,8 +139,8 @@ describe("InitService scaffold", () => {
     },
     {
       agent: piAgent,
-      expectedKey: "ANTHROPIC_API_KEY=",
-      unexpectedKey: "OPENAI_KEY=",
+      expectedKey: "ZAI_API_KEY=",
+      unexpectedKey: "ANTHROPIC_API_KEY=",
       expectIssue191Link: false,
     },
     {
@@ -647,7 +647,7 @@ describe("InitService scaffold", () => {
 
   it("scaffolds pi agent with pi Dockerfile", async () => {
     const dir = await makeDir();
-    await runScaffold(dir, { agent: piAgent, model: "claude-sonnet-4-6" });
+    await runScaffold(dir, { agent: piAgent, model: "glm-5.1" });
 
     const dockerfile = await readFile(
       join(dir, ".sandcastle", "Dockerfile"),
@@ -655,19 +655,79 @@ describe("InitService scaffold", () => {
     );
     expect(dockerfile).toContain("FROM node:22-bookworm");
     expect(dockerfile).toContain("@mariozechner/pi-coding-agent");
+    expect(dockerfile).toContain("COPY extensions/zai-provider/");
     expect(dockerfile).not.toContain("{{BACKLOG_MANAGER_TOOLS}}");
   });
 
   it("scaffolds main.mts with pi factory import when pi agent selected", async () => {
     const dir = await makeDir();
-    await runScaffold(dir, { agent: piAgent, model: "claude-sonnet-4-6" });
+    await runScaffold(dir, { agent: piAgent, model: "glm-5.1" });
 
     const mainTs = await readFile(
       join(dir, ".sandcastle", "main.mts"),
       "utf-8",
     );
-    expect(mainTs).toContain('pi("claude-sonnet-4-6")');
+    expect(mainTs).toContain('pi("glm-5.1")');
     expect(mainTs).not.toContain("claudeCode");
+  });
+
+  // --- Pi + Z.ai new tests ---
+
+  it("pi agent entry has 'Pi + Z.ai' label", () => {
+    const agent = getAgent("pi");
+    expect(agent).toBeDefined();
+    expect(agent!.label).toBe("Pi + Z.ai");
+  });
+
+  it("pi agent entry envExample contains ZAI_API_KEY", () => {
+    const agent = getAgent("pi");
+    expect(agent).toBeDefined();
+    expect(agent!.envExample).toContain("ZAI_API_KEY=");
+  });
+
+  it("scaffold with pi agent creates extensions/zai-provider/index.ts", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir, { agent: piAgent, model: "glm-5.1" });
+
+    const extFile = await readFile(
+      join(dir, ".sandcastle", "extensions", "zai-provider", "index.ts"),
+      "utf-8",
+    );
+    expect(extFile).toContain("registerProvider");
+  });
+
+  it("scaffold with pi agent extension source has lowercase model IDs", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir, { agent: piAgent, model: "glm-5.1" });
+
+    const extFile = await readFile(
+      join(dir, ".sandcastle", "extensions", "zai-provider", "index.ts"),
+      "utf-8",
+    );
+    // Model IDs must be lowercase (e.g. glm-5.1, not GLM-5.1)
+    expect(extFile).toContain("id: \"glm-5.1\"");
+    expect(extFile).not.toContain("id: \"GLM-");
+  });
+
+  it("scaffold with claude-code agent does not create extensions directory", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir);
+
+    const { access } = await import("node:fs/promises");
+    await expect(
+      access(join(dir, ".sandcastle", "extensions")),
+    ).rejects.toThrow();
+  });
+
+  it("scaffold with pi agent Dockerfile has COPY for zai-provider", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir, { agent: piAgent, model: "glm-5.1" });
+
+    const dockerfile = await readFile(
+      join(dir, ".sandcastle", "Dockerfile"),
+      "utf-8",
+    );
+    expect(dockerfile).toContain("COPY extensions/zai-provider/");
   });
 
   it("scaffolds codex agent with codex Dockerfile", async () => {
@@ -1730,7 +1790,7 @@ describe("InitService scaffold", () => {
       const dir = await makeDir();
       await runScaffold(dir, {
         agent: piAgent,
-        model: "claude-sonnet-4-6",
+        model: "glm-5.1",
         backlogManager: getBacklogManager("beads"),
       });
 
@@ -1826,13 +1886,13 @@ describe("InitService scaffold", () => {
         join(dir, "package.json"),
         JSON.stringify({ name: "test", type: "module" }),
       );
-      await runScaffold(dir, { agent: piAgent, model: "claude-sonnet-4-6" });
+      await runScaffold(dir, { agent: piAgent, model: "glm-5.1" });
 
       const mainContent = await readFile(
         join(dir, ".sandcastle", "main.ts"),
         "utf-8",
       );
-      expect(mainContent).toContain('pi("claude-sonnet-4-6")');
+      expect(mainContent).toContain('pi("glm-5.1")');
       expect(mainContent).not.toContain("claudeCode");
     });
 
