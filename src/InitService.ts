@@ -472,13 +472,16 @@ const rewriteMainTs = (
     // Templates always use claudeCode as the placeholder factory.
     content = content.replace(/\bclaudeCode\b/g, agent.factoryImport);
     // Replace model strings in factory calls: factoryImport("any-model")
+    // For pi, prefix the model with "zai/" so pi's CLI resolver selects the
+    // Z.ai provider unambiguously.
+    const resolvedModel = agent.name === "pi" ? `zai/${model}` : model;
     const factoryCallRe = new RegExp(
       `${agent.factoryImport}\\(["']([^"']+)["']\\)`,
       "g",
     );
     content = content.replace(
       factoryCallRe,
-      `${agent.factoryImport}("${model}")`,
+      `${agent.factoryImport}("${resolvedModel}")`,
     );
 
     yield* fs
