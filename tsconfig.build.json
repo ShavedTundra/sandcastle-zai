@@ -1,4 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "src/templates", "src/agent-extensions"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "src/templates",
+    "src/agent-extensions",
+    "src/sandboxes/daytona.ts"
+  ]
 }
