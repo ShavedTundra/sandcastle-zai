@@ -39,7 +39,10 @@ npm install --save-dev @ai-hero/sandcastle
 npx sandcastle init
 ```
 
-3. Edit `.sandcastle/.env` and fill in your default values for `ANTHROPIC_API_KEY`. If you want to use your Claude subscription instead of an API key, see [#191](https://github.com/mattpocock/sandcastle/issues/191).
+3. Edit `.sandcastle/.env` and fill in your API key:
+
+   - **Pi + Z.ai** (selected during init): set `ZAI_API_KEY`
+   - **Claude Code**: set `ANTHROPIC_API_KEY`. If you want to use your Claude subscription instead of an API key, see [#191](https://github.com/mattpocock/sandcastle/issues/191)
 
 ```bash
 cp .sandcastle/.env.example .sandcastle/.env
@@ -52,7 +55,19 @@ npx tsx .sandcastle/main.ts
 ```
 
 ```typescript
-// 3. Run the agent via the JS API
+// Using Pi + Z.ai (subscription-based, cost-free for coding tasks)
+import { run, pi } from "@ai-hero/sandcastle";
+import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+
+await run({
+  agent: pi("glm-5.1"),
+  sandbox: docker(),
+  promptFile: ".sandcastle/prompt.md",
+});
+```
+
+```typescript
+// Or using Claude Code
 import { run, claudeCode } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
@@ -104,6 +119,29 @@ You can also [create your own provider](#custom-sandbox-providers) using `create
 
 Sandcastle exports a programmatic `run()` function for use in scripts, CI pipelines, or custom tooling. The examples below use `docker()`, but any `SandboxProvider` works in its place.
 
+### Using Pi + Z.ai
+
+The `pi()` agent ships with Z.ai's GLM models as the default provider. Z.ai Coding Plan is subscription-based — no per-token costs for coding tasks.
+
+```typescript
+import { run, pi } from "@ai-hero/sandcastle";
+import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+
+const result = await run({
+  agent: pi("glm-5.1"),
+  sandbox: docker(),
+  promptFile: ".sandcastle/prompt.md",
+});
+
+console.log(result.iterations.length); // number of iterations executed
+console.log(result.commits); // array of { sha } for commits created
+console.log(result.branch); // target branch name
+```
+
+Available Z.ai models: `glm-5.1` (200K context, reasoning), `glm-5-turbo` (200K context, reasoning), `glm-4.7` (200K context, reasoning), `glm-4.5-air` (128K context, standard).
+
+### Using Claude Code
+
 ```typescript
 import { run, claudeCode } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
@@ -127,9 +165,11 @@ import { run, claudeCode } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
 const result = await run({
-  // Agent provider — required. Pass a model string to claudeCode().
+  // Agent provider — required. Pass a model string.
   // Optional second arg for provider-specific options like effort level.
-  agent: claudeCode("claude-opus-4-6", { effort: "high" }),
+  agent: pi("glm-5.1"),
+  // agent: claudeCode("claude-opus-4-6", { effort: "high" }),
+  // agent: codex("gpt-5.4-mini", { effort: "high" }),
 
   // Sandbox provider — required. Any SandboxProvider works (docker, podman, vercel, or custom).
   // Provider-specific config (like imageName, mounts) lives inside the provider factory call.
@@ -231,7 +271,7 @@ Use `run()` instead when you only need a single one-shot invocation — it handl
 #### Basic single-run usage
 
 ```typescript
-import { createSandbox, claudeCode } from "@ai-hero/sandcastle";
+import { createSandbox, pi } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
 await using sandbox = await createSandbox({
@@ -240,7 +280,7 @@ await using sandbox = await createSandbox({
 });
 
 const result = await sandbox.run({
-  agent: claudeCode("claude-opus-4-6"),
+  agent: pi("glm-5.1"),
   prompt: "Fix issue #42 in this repo.",
 });
 
@@ -250,7 +290,7 @@ console.log(result.commits); // [{ sha: "abc123" }]
 #### Multi-run implement-then-review
 
 ```typescript
-import { createSandbox, claudeCode } from "@ai-hero/sandcastle";
+import { createSandbox, pi, claudeCode } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
 await using sandbox = await createSandbox({
@@ -259,14 +299,14 @@ await using sandbox = await createSandbox({
   hooks: { sandbox: { onSandboxReady: [{ command: "npm install" }] } },
 });
 
-// Step 1: implement
+// Step 1: implement with Z.ai
 const implResult = await sandbox.run({
-  agent: claudeCode("claude-opus-4-6"),
+  agent: pi("glm-5.1"),
   promptFile: ".sandcastle/implement.md",
   maxIterations: 5,
 });
 
-// Step 2: review on the same branch, same container
+// Step 2: review with Claude
 const reviewResult = await sandbox.run({
   agent: claudeCode("claude-sonnet-4-6"),
   prompt: "Review the changes and fix any issues.",
@@ -613,7 +653,7 @@ Scaffolds the `.sandcastle/` config directory and builds the container image. Th
 | Option         | Required | Default                      | Description                                                          |
 | -------------- | -------- | ---------------------------- | -------------------------------------------------------------------- |
 | `--image-name` | No       | `sandcastle:<repo-dir-name>` | Docker image name                                                    |
-| `--agent`      | No       | Interactive prompt           | Agent to use (`claude-code`, `pi`, `codex`, `opencode`)              |
+| `--agent`      | No       | Interactive prompt           | Agent to use (`claude-code`, `pi`, `codex`, `opencode`). `pi` ships with Z.ai as default provider |
 | `--model`      | No       | Agent's default model        | Model to use (e.g. `claude-sonnet-4-6`). Defaults to agent's default |
 | `--template`   | No       | Interactive prompt           | Template to scaffold (e.g. `blank`, `simple-loop`)                   |
 
@@ -623,9 +663,13 @@ Creates the following files:
 .sandcastle/
 ├── Dockerfile      # Sandbox environment (customize as needed)
 ├── prompt.md       # Agent instructions
-├── .env.example    # Token placeholders
-└── .gitignore      # Ignores .env, logs/
+├── .env.example    # API key placeholders
+├── .gitignore      # Ignores .env, logs/
+└── extensions/     # Agent extensions (only when pi agent is selected)
+    └── zai-provider/  # Z.ai provider extension for pi
 ```
+
+When the **Pi + Z.ai** agent is selected, the Z.ai provider extension is bundled into `.sandcastle/extensions/zai-provider/`. This extension registers Z.ai's GLM models (`glm-5.1`, `glm-5-turbo`, `glm-4.7`, `glm-4.5-air`) as pi providers via the OpenAI-compatible API at `https://api.z.ai/api/coding/paas/v4`. The extension is copied into the Docker image during `docker build`.
 
 Errors if `.sandcastle/` already exists to prevent overwriting customizations.
 
@@ -667,7 +711,7 @@ Removes the Podman image.
 
 | Option               | Type               | Default                       | Description                                                                                                                                                     |
 | -------------------- | ------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent`              | AgentProvider      | —                             | **Required.** Agent provider (e.g. `claudeCode("claude-opus-4-6")`, `pi("claude-sonnet-4-6")`, `codex("gpt-5.4-mini")`, `opencode("opencode/big-pickle")`)      |
+| `agent`              | AgentProvider      | —                             | **Required.** Agent provider (e.g. `claudeCode("claude-opus-4-6")`, `pi("glm-5.1")`, `codex("gpt-5.4-mini")`, `opencode("opencode/big-pickle")`)      |
 | `sandbox`            | SandboxProvider    | —                             | **Required.** Sandbox provider (e.g. `docker()`, `podman()`, `docker({ imageName: "sandcastle:local" })`)                                                       |
 | `cwd`                | string             | `process.cwd()`               | Host repo directory — anchor for `.sandcastle/` artifacts and git operations. Relative paths resolve against `process.cwd()`.                                   |
 | `prompt`             | string             | —                             | Inline prompt (mutually exclusive with `promptFile`)                                                                                                            |
@@ -1115,10 +1159,12 @@ The `.sandcastle/Dockerfile` controls the sandbox environment. The default templ
 
 When customizing the Dockerfile, ensure you keep:
 
-- A non-root user (the default `agent` user) for Claude to run as
+- A non-root user (the default `agent` user) for the agent to run as
 - `git` (required for commits and branch operations)
-- `gh` (required for issue fetching)
-- Claude Code CLI installed and on PATH
+- `gh` (required for issue fetching, when using GitHub Issues backlog manager)
+- The agent CLI installed and on PATH (Claude Code CLI, pi, Codex, or OpenCode)
+
+**Pi + Z.ai Dockerfile**: If you selected the Pi + Z.ai agent, the Dockerfile also includes a `COPY` instruction for the Z.ai provider extension. This extension is required for `glm-5.1` and other Z.ai models to work inside the sandbox. Do not remove it.
 
 Add your project-specific dependencies (e.g., language runtimes, build tools) to the Dockerfile as needed.
 
