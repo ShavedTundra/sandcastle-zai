@@ -655,7 +655,7 @@ describe("InitService scaffold", () => {
     );
     expect(dockerfile).toContain("FROM node:22-bookworm");
     expect(dockerfile).toContain("@mariozechner/pi-coding-agent");
-    expect(dockerfile).toContain("COPY extensions/zai-provider/");
+    expect(dockerfile).toContain("COPY .sandcastle/extensions/zai-provider/");
     expect(dockerfile).not.toContain("{{BACKLOG_MANAGER_TOOLS}}");
   });
 
@@ -667,7 +667,7 @@ describe("InitService scaffold", () => {
       join(dir, ".sandcastle", "main.mts"),
       "utf-8",
     );
-    expect(mainTs).toContain('pi("glm-5.1")');
+    expect(mainTs).toContain('pi("zai/glm-5.1")');
     expect(mainTs).not.toContain("claudeCode");
   });
 
@@ -705,8 +705,8 @@ describe("InitService scaffold", () => {
       "utf-8",
     );
     // Model IDs must be lowercase (e.g. glm-5.1, not GLM-5.1)
-    expect(extFile).toContain("id: \"glm-5.1\"");
-    expect(extFile).not.toContain("id: \"GLM-");
+    expect(extFile).toContain('id: "glm-5.1"');
+    expect(extFile).not.toContain('id: "GLM-');
   });
 
   it("scaffold with claude-code agent does not create extensions directory", async () => {
@@ -727,7 +727,7 @@ describe("InitService scaffold", () => {
       join(dir, ".sandcastle", "Dockerfile"),
       "utf-8",
     );
-    expect(dockerfile).toContain("COPY extensions/zai-provider/");
+    expect(dockerfile).toContain("COPY .sandcastle/extensions/zai-provider/");
   });
 
   it("scaffolds codex agent with codex Dockerfile", async () => {
@@ -1892,7 +1892,7 @@ describe("InitService scaffold", () => {
         join(dir, ".sandcastle", "main.ts"),
         "utf-8",
       );
-      expect(mainContent).toContain('pi("glm-5.1")');
+      expect(mainContent).toContain('pi("zai/glm-5.1")');
       expect(mainContent).not.toContain("claudeCode");
     });
 

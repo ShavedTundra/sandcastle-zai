@@ -108,7 +108,7 @@ RUN npm install -g @mariozechner/pi-coding-agent@0.72.0
 
 USER agent
 
-COPY extensions/zai-provider/ /home/agent/.pi/agent/extensions/zai-provider/
+COPY .sandcastle/extensions/zai-provider/ /home/agent/.pi/agent/extensions/zai-provider/
 
 WORKDIR /home/agent
 
@@ -472,13 +472,16 @@ const rewriteMainTs = (
     // Templates always use claudeCode as the placeholder factory.
     content = content.replace(/\bclaudeCode\b/g, agent.factoryImport);
     // Replace model strings in factory calls: factoryImport("any-model")
+    // For pi, prefix the model with "zai/" so pi's CLI resolver selects the
+    // Z.ai provider unambiguously.
+    const resolvedModel = agent.name === "pi" ? `zai/${model}` : model;
     const factoryCallRe = new RegExp(
       `${agent.factoryImport}\\(["']([^"']+)["']\\)`,
       "g",
     );
     content = content.replace(
       factoryCallRe,
-      `${agent.factoryImport}("${model}")`,
+      `${agent.factoryImport}("${resolvedModel}")`,
     );
 
     yield* fs
