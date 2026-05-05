@@ -1,5 +1,11 @@
 # @ai-hero/sandcastle
 
+## 0.5.8
+
+### Patch Changes
+
+- Document Z.ai model ID collision with built-in `opencode` provider in Pi. Users and templates must use fully-qualified `zai/` prefix (e.g. `pi("zai/glm-5.1")`) to avoid ambiguous model resolution. README updated with new "Z.ai model IDs" section.
+
 ## 0.5.7
 
 ### Patch Changes
