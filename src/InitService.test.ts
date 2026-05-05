@@ -655,7 +655,7 @@ describe("InitService scaffold", () => {
     );
     expect(dockerfile).toContain("FROM node:22-bookworm");
     expect(dockerfile).toContain("@mariozechner/pi-coding-agent");
-    expect(dockerfile).toContain("COPY extensions/zai-provider/");
+    expect(dockerfile).toContain("COPY .sandcastle/extensions/zai-provider/");
     expect(dockerfile).not.toContain("{{BACKLOG_MANAGER_TOOLS}}");
   });
 
@@ -727,7 +727,7 @@ describe("InitService scaffold", () => {
       join(dir, ".sandcastle", "Dockerfile"),
       "utf-8",
     );
-    expect(dockerfile).toContain("COPY extensions/zai-provider/");
+    expect(dockerfile).toContain("COPY .sandcastle/extensions/zai-provider/");
   });
 
   it("scaffolds codex agent with codex Dockerfile", async () => {

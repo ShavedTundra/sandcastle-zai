@@ -108,7 +108,7 @@ RUN npm install -g @mariozechner/pi-coding-agent@0.72.0
 
 USER agent
 
-COPY extensions/zai-provider/ /home/agent/.pi/agent/extensions/zai-provider/
+COPY .sandcastle/extensions/zai-provider/ /home/agent/.pi/agent/extensions/zai-provider/
 
 WORKDIR /home/agent
 
