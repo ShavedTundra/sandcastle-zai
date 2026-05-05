@@ -378,6 +378,11 @@ function getTemplatesDir(): string {
   return join(dirname(thisFile), "templates");
 }
 
+function getAgentExtensionsDir(): string {
+  const thisFile = fileURLToPath(import.meta.url);
+  return join(dirname(thisFile), "agent-extensions");
+}
+
 const getTemplateDir = (
   templateName: string,
 ): Effect.Effect<string, Error, never> =>
@@ -678,6 +683,26 @@ export const scaffold = (
       ],
       { concurrency: "unbounded" },
     );
+
+    // Copy agent-specific extensions when using pi
+    if (agent.name === "pi") {
+      const extSrc = join(getAgentExtensionsDir(), "zai-provider");
+      const extDest = join(configDir, "extensions", "zai-provider");
+      const extFiles = yield* fs
+        .readDirectory(extSrc)
+        .pipe(Effect.mapError((e) => new Error(e.message)));
+      yield* fs
+        .makeDirectory(extDest, { recursive: true })
+        .pipe(Effect.mapError((e) => new Error(e.message)));
+      yield* Effect.all(
+        extFiles.map((f) =>
+          fs
+            .copyFile(join(extSrc, f), join(extDest, f))
+            .pipe(Effect.mapError((e) => new Error(e.message))),
+        ),
+        { concurrency: "unbounded" },
+      );
+    }
 
     // Rewrite main file with the selected agent factory and model
     yield* rewriteMainTs(configDir, agent, model, mainFilename);
