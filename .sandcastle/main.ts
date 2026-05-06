@@ -52,6 +52,14 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     encoding: "utf-8",
   }).trim();
 
+  // Create the branch ahead of time so the sandbox worktree creation succeeds
+  // regardless of git locale (WorktreeManager.ts relies on string-matching
+  // "invalid reference" which fails on non-English locales).
+  const iterationBranch = `sandcastle/iteration-${iteration}-${Date.now()}`;
+  execSync(`git branch ${iterationBranch} ${sourceBranch}`, {
+    encoding: "utf-8",
+  });
+
   // -------------------------------------------------------------------------
   // Phase 1: Implement
   //
@@ -68,9 +76,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     sandbox: docker(),
     branchStrategy: {
       type: "branch",
-      // Use a persistent named branch so the reviewer can inspect the diff.
-      // merge-to-head would delete the temp branch before the reviewer runs.
-      branch: `sandcastle/iteration-${iteration}-${Date.now()}`,
+      branch: iterationBranch,
     },
     name: "implementer",
     maxIterations: 100,
