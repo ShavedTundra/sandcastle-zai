@@ -82,9 +82,7 @@ describe("encodeProjectPath", () => {
   });
 
   it("strips multiple trailing backslashes", () => {
-    expect(encodeProjectPath("D:\\projekts\\app\\\\")).toBe(
-      "D-projekts-app",
-    );
+    expect(encodeProjectPath("D:\\projekts\\app\\\\")).toBe("D-projekts-app");
   });
 });
 
@@ -412,6 +410,56 @@ describe("sandboxSessionStore", () => {
       "/home/agent/.claude/projects/-home-agent-workspace",
     );
     expect(calls[1]).toBe("copyFileIn");
+  });
+
+  it("always uses forward slashes for sandbox paths regardless of host platform", async () => {
+    // Regression (#560): On Windows, node:path.join produces backslash-separated
+    // paths, which are invalid inside a Linux container. Sandbox-side paths
+    // passed to copyFileIn/copyFileOut/exec must always use forward slashes.
+    const sandboxProjectsDir = "/home/agent/.claude/projects";
+    const sandboxCwd = "/home/agent/workspace";
+
+    const copyFileOutCalls: Array<{ from: string; to: string }> = [];
+    const copyFileInCalls: Array<{ from: string; to: string }> = [];
+    const execCalls: string[] = [];
+
+    const handle: Pick<
+      BindMountSandboxHandle,
+      "copyFileIn" | "copyFileOut" | "exec"
+    > = {
+      copyFileIn: async (hostPath: string, sandboxPath: string) => {
+        copyFileInCalls.push({ from: hostPath, to: sandboxPath });
+      },
+      copyFileOut: async (sandboxPath: string, hostPath: string) => {
+        copyFileOutCalls.push({ from: sandboxPath, to: hostPath });
+        await writeFile(hostPath, JSON.stringify({ type: "init" }));
+      },
+      exec: async (command: string) => {
+        execCalls.push(command);
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
+    };
+
+    const store = sandboxSessionStore(
+      sandboxCwd,
+      handle as BindMountSandboxHandle,
+      sandboxProjectsDir,
+    );
+
+    // Test readSession
+    await store.readSession("s1");
+    expect(copyFileOutCalls[0]!.from).toBe(
+      "/home/agent/.claude/projects/-home-agent-workspace/s1.jsonl",
+    );
+    expect(copyFileOutCalls[0]!.from).not.toContain("\\");
+
+    // Test writeSession
+    await store.writeSession("s2", "{}");
+    expect(copyFileInCalls[0]!.to).toBe(
+      "/home/agent/.claude/projects/-home-agent-workspace/s2.jsonl",
+    );
+    expect(copyFileInCalls[0]!.to).not.toContain("\\");
+    expect(execCalls[0]!).not.toContain("\\");
   });
 
   it("exposes cwd", () => {
