@@ -18,6 +18,7 @@
 
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { execSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -45,6 +46,12 @@ const copyToWorktree = ["node_modules"];
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
+  // Capture the source branch (current HEAD) before the implementer creates
+  // a new branch, so the reviewer can diff against it.
+  const sourceBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+    encoding: "utf-8",
+  }).trim();
+
   // -------------------------------------------------------------------------
   // Phase 1: Implement
   //
@@ -59,7 +66,12 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     hooks,
     copyToWorktree,
     sandbox: docker(),
-    branchStrategy: { type: "merge-to-head" },
+    branchStrategy: {
+      type: "branch",
+      // Use a persistent named branch so the reviewer can inspect the diff.
+      // merge-to-head would delete the temp branch before the reviewer runs.
+      branch: `sandcastle/iteration-${iteration}-${Date.now()}`,
+    },
     name: "implementer",
     maxIterations: 100,
     agent: sandcastle.claudeCode("claude-sonnet-4-6"),
@@ -97,6 +109,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     // agent sees the prompt.
     promptArgs: {
       BRANCH: branch,
+      SOURCE_BRANCH: sourceBranch,
     },
   });
 
