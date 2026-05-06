@@ -8,6 +8,11 @@ Here are the open issues in the repo:
 
 </issues-json>
 
+# CONSTRAINT
+
+You MUST ONLY include issues from the JSON list above in your plan. Do NOT query
+for additional issues. Do NOT include any issue that is not in the provided list.
+
 # TASK
 
 Analyze the open issues and build a dependency graph. For each issue, determine whether it **blocks** or **is blocked by** any other open issue.
