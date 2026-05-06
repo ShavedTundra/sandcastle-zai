@@ -52,8 +52,17 @@ export const buildImage = (
     }
   });
 
+export interface BindMount {
+  /** Host-side path (source). */
+  readonly source: string;
+  /** Container-side path (target). */
+  readonly target: string;
+  /** Whether the mount is read-only. */
+  readonly readonly?: boolean;
+}
+
 export interface StartContainerOptions {
-  readonly volumeMounts?: readonly string[];
+  readonly volumeMounts?: readonly BindMount[];
   readonly workdir?: string;
   /** Run the container as this uid:gid instead of the Dockerfile's USER. */
   readonly user?: string;
@@ -94,10 +103,17 @@ export const startContainer = (
       `${k}=${v}`,
     ]);
 
-    const volumeFlags = (options?.volumeMounts ?? []).flatMap((mount) => [
-      "-v",
-      mount,
-    ]);
+    const volumeFlags = (options?.volumeMounts ?? []).flatMap((mount) => {
+      // Use --mount syntax to avoid colon ambiguity with Windows drive
+      // letters (e.g. C:/path:/container/path has 3 colons with -v).
+      const parts = [
+        `type=bind`,
+        `source=${mount.source}`,
+        `target=${mount.target}`,
+      ];
+      if (mount.readonly) parts.push("readonly");
+      return ["--mount", parts.join(",")];
+    });
 
     const workdirFlags = options?.workdir ? ["-w", options.workdir] : [];
     const userFlags = options?.user ? ["--user", options.user] : [];

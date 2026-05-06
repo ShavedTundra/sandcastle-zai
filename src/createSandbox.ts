@@ -39,6 +39,7 @@ import {
   SANDBOX_REPO_DIR,
   resolveGitMounts,
 } from "./SandboxFactory.js";
+import { patchGitMountsForWindows } from "./mountUtils.js";
 import type {
   SandboxProvider,
   BindMountSandboxHandle,
@@ -527,7 +528,12 @@ export const createSandboxFromWorktree = async (
     options.sandbox.tag !== "isolated"
   ) {
     await Effect.runPromise(
-      copyToWorktree(options.copyToWorktree, hostRepoDir, worktreePath, options.timeouts?.copyToWorktreeMs),
+      copyToWorktree(
+        options.copyToWorktree,
+        hostRepoDir,
+        worktreePath,
+        options.timeouts?.copyToWorktreeMs,
+      ),
     );
   }
 
@@ -567,6 +573,18 @@ export const createSandboxFromWorktree = async (
       startEffect = resolveGitMounts(join(hostRepoDir, ".git")).pipe(
         Effect.provide(NodeFileSystem.layer),
         Effect.catchAll(() => Effect.succeed([])),
+        // Patch git mounts for Windows worktree compatibility (ADR-0006)
+        Effect.flatMap((gitMounts) =>
+          Effect.tryPromise({
+            try: () =>
+              patchGitMountsForWindows(
+                gitMounts,
+                worktreePath,
+                SANDBOX_REPO_DIR,
+              ),
+            catch: () => gitMounts,
+          }),
+        ),
         Effect.flatMap((gitMounts) =>
           startSandbox({
             provider,
@@ -681,7 +699,12 @@ export const createSandbox = async (
     options.sandbox.tag !== "isolated"
   ) {
     await Effect.runPromise(
-      copyToWorktree(options.copyToWorktree, hostRepoDir, worktreePath, options.timeouts?.copyToWorktreeMs),
+      copyToWorktree(
+        options.copyToWorktree,
+        hostRepoDir,
+        worktreePath,
+        options.timeouts?.copyToWorktreeMs,
+      ),
     );
   }
 
@@ -729,6 +752,18 @@ export const createSandbox = async (
       startEffect = resolveGitMounts(join(hostRepoDir, ".git")).pipe(
         Effect.provide(NodeFileSystem.layer),
         Effect.catchAll(() => Effect.succeed([])),
+        // Patch git mounts for Windows worktree compatibility (ADR-0006)
+        Effect.flatMap((gitMounts) =>
+          Effect.tryPromise({
+            try: () =>
+              patchGitMountsForWindows(
+                gitMounts,
+                worktreePath,
+                SANDBOX_REPO_DIR,
+              ),
+            catch: () => gitMounts,
+          }),
+        ),
         Effect.flatMap((gitMounts) =>
           startSandbox({
             provider,

@@ -72,4 +72,50 @@ describe("startContainer", () => {
     const runArgs = runCall![1] as string[];
     expect(runArgs).not.toContain("--network");
   });
+
+  it("uses --mount type=bind syntax for volume mounts", async () => {
+    mockExecFile.mockImplementation((_cmd, _args, _opts, cb: any) => {
+      cb(null, "", "");
+      return undefined as any;
+    });
+
+    await Effect.runPromise(
+      startContainer(
+        "ctr",
+        "img",
+        {},
+        {
+          volumeMounts: [
+            { source: "/host/path", target: "/container/path" },
+            {
+              source: "/host/readonly",
+              target: "/container/readonly",
+              readonly: true,
+            },
+          ],
+        },
+      ),
+    );
+
+    const runCall = mockExecFile.mock.calls.find(
+      ([, args]) => Array.isArray(args) && args[0] === "run",
+    );
+    expect(runCall).toBeDefined();
+    const runArgs = runCall![1] as string[];
+
+    const mountIdx = runArgs.indexOf("--mount");
+    expect(mountIdx).toBeGreaterThan(-1);
+    expect(runArgs[mountIdx + 1]).toBe(
+      "type=bind,source=/host/path,target=/container/path",
+    );
+
+    const secondMountIdx = runArgs.indexOf("--mount", mountIdx + 1);
+    expect(secondMountIdx).toBeGreaterThan(-1);
+    expect(runArgs[secondMountIdx + 1]).toBe(
+      "type=bind,source=/host/readonly,target=/container/readonly,readonly",
+    );
+
+    // Must NOT use -v syntax
+    expect(runArgs).not.toContain("-v");
+  });
 });
